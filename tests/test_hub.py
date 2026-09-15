@@ -43,6 +43,76 @@ class HubTests(unittest.TestCase):
         self.assertEqual(len(self.hub.threads[-1]['messages']),2)
         self.assertFalse(self.hub.active)
 
+    def test_close_demo_persists_and_is_read_only(self):
+        self.hub.save({'mode':'demo','agents':['codex']})
+        tid=self.hub.new_thread('Close test')
+        self.hub.message(tid,'keep this',['codex'])
+        self.hub.close_thread(tid,'Finished')
+        with self.assertRaises(ValueError):self.hub.message(tid,'late',[])
+        self.hub.close();self.hub=Hub(Path(self.temp.name))
+        restored=self.hub.archived_threads([],self.hub.config.value)
+        self.assertEqual(restored[0]['state'],'closed')
+        self.assertEqual(restored[0]['messages'][0]['messageText'],'keep this')
+        self.assertEqual(restored[0]['summary'],'Finished')
+
+    def test_close_coral_archives_before_remote_erases_messages(self):
+        cfg=self.coral_config();self.hub.config.value=cfg
+        threads=[self.thread([self.msg()])]
+        self.hub.threads=threads;self.hub.ingest([],cfg);self.hub.ingest(threads,cfg)
+        def remote_close(*args,**kwargs):
+            self.assertEqual(args,('coral_close_thread',))
+            self.assertEqual(kwargs,{'threadId':'t1','summary':'Done'})
+            row=self.hub.db.execute('SELECT snapshot FROM archives').fetchone()
+            self.assertEqual(json.loads(row[0])['messages'][0]['messageText'],'hello')
+            threads[0]['messages']=[];threads[0]['state']='closed'
+        with patch.object(self.hub,'peer') as peer:
+            peer.return_value.threads.return_value=threads
+            peer.return_value.tool.side_effect=remote_close
+            self.hub.close_thread('t1','Done')
+        self.assertEqual(self.hub.threads[0]['messages'][0]['messageText'],'hello')
+        row=self.hub.db.execute('SELECT * FROM jobs').fetchone()
+        self.assertEqual(row['status'],'cancelled')
+        with self.assertRaises(ValueError):self.hub.retry(row['id'])
+        different=dict(cfg,agents=['cursor'])
+        self.assertEqual(self.hub.archived_threads([],different),[])
+
+    def test_close_backup_failure_never_calls_remote(self):
+        cfg=self.coral_config();self.hub.config.value=cfg
+        self.hub.db.execute("CREATE TRIGGER reject_archive BEFORE INSERT ON archives BEGIN SELECT RAISE(FAIL, 'disk unavailable'); END")
+        with patch.object(self.hub,'peer') as peer:
+            peer.return_value.threads.return_value=[self.thread([self.msg()])]
+            with self.assertRaises(Exception):self.hub.close_thread('t1','Done')
+            peer.return_value.tool.assert_not_called()
+
+    def test_close_remote_failure_keeps_channel_open_and_snapshot(self):
+        cfg=self.coral_config();self.hub.config.value=cfg
+        threads=[self.thread([self.msg()])];self.hub.threads=threads
+        with patch.object(self.hub,'peer') as peer:
+            peer.return_value.threads.return_value=threads
+            peer.return_value.tool.side_effect=TransportError('offline')
+            with self.assertRaises(TransportError):self.hub.close_thread('t1','Done')
+        self.assertEqual(self.hub.archived_threads(threads,cfg)[0]['state'],'open')
+        # A lost response after a successful remote close still recovers the backup.
+        closed=self.hub.archived_threads([dict(threads[0],state='closed',messages=[])],cfg)
+        self.assertEqual(closed[0]['messages'][0]['messageText'],'hello')
+
+    def test_close_blocks_active_worker(self):
+        self.hub.config.value=self.coral_config()
+        self.hub.active['codex']={'job':{'tid':'t1'},'cancel':threading.Event()}
+        with patch.object(self.hub,'peer') as peer:
+            with self.assertRaises(ValueError):self.hub.close_thread('t1','Done')
+            peer.assert_not_called()
+        self.hub.active.clear()
+
+    def test_closed_channel_does_not_send_ready_result(self):
+        cfg=self.coral_config();self.hub.ingest([],cfg)
+        self.hub.ingest([self.thread([self.msg()])],cfg)
+        self.hub.db.execute("UPDATE jobs SET status='ready',result=?",(json.dumps({'reply':'late','mentions':[]}),))
+        with patch.object(self.hub,'peer') as peer:
+            self.hub.work(cfg,[{'threadId':'t1','state':'closed','messages':[]}])
+            peer.assert_not_called()
+        self.assertEqual(self.hub.db.execute('SELECT status FROM jobs').fetchone()[0],'cancelled')
+
     def test_secret_redaction_and_rotation(self):
         cfg=self.coral_config()
         self.hub.config.save(cfg)
@@ -149,6 +219,16 @@ class HubTests(unittest.TestCase):
             self.assertEqual(raised.exception.code,403)
             request.add_header('X-Hub-CSRF',bootstrap['csrf'])
             with urllib.request.urlopen(request) as r:self.assertEqual(r.status,200)
+            tid=self.hub.new_thread('HTTP close')
+            self.hub.message(tid,'preserved through API',[])
+            close_request=urllib.request.Request(base+'/api/thread/close',
+                json.dumps({'threadId':tid,'summary':'Finished via HTTP'}).encode(),
+                {'Content-Type':'application/json','X-Hub-CSRF':bootstrap['csrf']})
+            with urllib.request.urlopen(close_request) as r:self.assertTrue(json.load(r)['ok'])
+            with urllib.request.urlopen(base+'/api/state') as r:
+                closed=next(t for t in json.load(r)['threads'] if t['threadId']==tid)
+                self.assertEqual(closed['state'],'closed')
+                self.assertEqual(closed['messages'][0]['messageText'],'preserved through API')
             request.add_header('Origin','https://evil.example')
             with self.assertRaises(urllib.error.HTTPError) as raised:urllib.request.urlopen(request)
             self.assertEqual(raised.exception.code,403)

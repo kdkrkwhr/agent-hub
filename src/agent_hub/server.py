@@ -52,6 +52,7 @@ def make_server(hub,port):
                 if self.path=='/api/config':result=hub.save(body)
                 elif self.path=='/api/test':result=hub.test_connection(body)
                 elif self.path=='/api/thread':result={'id':hub.new_thread(body.get('name'))}
+                elif self.path=='/api/thread/close':hub.close_thread(body.get('threadId'),body.get('summary'));result={'ok':True}
                 elif self.path=='/api/message':hub.message(body.get('threadId'),body.get('text'),body.get('mentions',[]));result={'ok':True}
                 elif self.path=='/api/automatic':hub.set_automatic(body.get('enabled'));result={'ok':True}
                 elif self.path=='/api/cancel':hub.cancel(body.get('id'));result={'ok':True}

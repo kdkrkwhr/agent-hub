@@ -21,6 +21,7 @@ class Hub:
         self.db.executescript('''CREATE TABLE IF NOT EXISTS jobs (
             id TEXT PRIMARY KEY, scope TEXT, tid TEXT, agent TEXT, source TEXT, status TEXT,
             attempt INTEGER, started REAL, ended REAL, result TEXT, error TEXT);
+            CREATE TABLE IF NOT EXISTS archives (scope TEXT, tid TEXT, snapshot TEXT, confirmed INTEGER DEFAULT 0, PRIMARY KEY(scope,tid));
             CREATE TABLE IF NOT EXISTS baselines (scope TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS executions (job TEXT, attempt INTEGER, scope TEXT, tid TEXT, agent TEXT, PRIMARY KEY(job,attempt));
         ''')
@@ -84,6 +85,42 @@ class Hub:
         with self.lock:self.threads=threads
         return tid
 
+    def archived_threads(self,threads,cfg):
+        merged={t['threadId']:t for t in threads}
+        for row in self.db.execute('SELECT * FROM archives WHERE scope=?',(self.scope(cfg),)):
+            current=merged.get(row['tid'])
+            if row['confirmed'] or (current and current.get('state')=='closed'):
+                saved=json.loads(row['snapshot']);saved['state']='closed';saved['archived']=True
+                merged[row['tid']]=saved
+        return list(merged.values())
+
+    def close_thread(self,tid,summary):
+        if not isinstance(summary,str) or not summary.strip() or len(summary)>2000:
+            raise ValueError('Closing summary must contain 1–2000 characters.')
+        with self.lock:
+            cfg=self.config.value
+            if not cfg:raise ValueError('Complete setup first.')
+            if any(a['job']['tid']==tid for a in self.active.values()):
+                raise ValueError('이 채널의 실행 중인 작업을 완료하거나 취소한 뒤 닫아 주세요.')
+            peer=self.peer(cfg['observer'],cfg) if cfg['mode']=='coral' else None
+            threads=peer.threads() if peer else self.demo
+            current=next((t for t in threads if t['threadId']==tid),None)
+            if not current:raise ValueError('Channel not found.')
+            if current.get('state')=='closed':raise ValueError('Channel is already closed.')
+            saved=dict(current);saved['summary']=summary.strip()
+            scope=self.scope(cfg)
+            # Commit the last readable snapshot BEFORE Coral can erase messages.
+            self.db.execute('INSERT OR REPLACE INTO archives VALUES (?,?,?,0)',
+                (scope,tid,json.dumps(saved,ensure_ascii=False)))
+            self.db.commit()
+            if peer:peer.tool('coral_close_thread',threadId=tid,summary=summary.strip())
+            else:current['state']='closed'
+            self.db.execute('UPDATE archives SET confirmed=1 WHERE scope=? AND tid=?',(scope,tid))
+            self.db.execute("UPDATE jobs SET status='cancelled',ended=?,error='Channel closed.' WHERE scope=? AND tid=? AND status IN ('pending','ready')",(time.time(),scope,tid))
+            self.db.commit()
+            self.revision+=1
+            self.threads=self.archived_threads(threads,cfg)
+
     def message(self,tid,text,mentions):
         if not isinstance(text,str) or not text.strip() or len(text)>12000:raise ValueError('Message must contain 1–12000 characters.')
         with self.lock:
@@ -135,6 +172,7 @@ class Hub:
             row=self.db.execute('SELECT * FROM jobs WHERE id=?',(key,)).fetchone()
             if not row or row['status'] not in ('failed','cancelled'):raise ValueError('Only failed or cancelled jobs can be retried.')
             if row['scope']!=self.scope(self.config.value):raise ValueError('This job belongs to different connection settings.')
+            if any(t['threadId']==row['tid'] and t.get('state')=='closed' for t in self.threads):raise ValueError('Channel is closed.')
             self.db.execute("UPDATE jobs SET status='pending',attempt=attempt+1,error=NULL,result=NULL,started=NULL,ended=NULL WHERE id=?",(key,));self.db.commit()
 
     def result(self,key):
@@ -162,6 +200,8 @@ class Hub:
             marker=f"[HUB:{row['id']}:{row['attempt']}]"
             t=next((t for t in threads if t['threadId']==row['tid']),None)
             if not t:continue
+            if t.get('state')=='closed':
+                self.db.execute("UPDATE jobs SET status='cancelled',error='Channel closed.' WHERE id=?",(row['id'],));self.db.commit();continue
             exists=any(marker in m.get('messageText','') and m.get('sendingAgentName')==row['agent'] for m in t.get('messages',[]))
             if not exists:
                 result=json.loads(row['result'])
@@ -204,6 +244,7 @@ class Hub:
                     else:threads=self.peer(cfg['observer'],cfg).threads()
                     with self.lock:
                         if revision!=self.revision:continue
+                        threads=self.archived_threads(threads,cfg)
                         self.threads=threads;self.connected=True;self.error=None;self.updated=time.time()
                         if cfg['mode']=='coral':self.ingest(threads,cfg);self.work(cfg,threads)
             except Exception:
