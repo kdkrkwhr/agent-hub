@@ -13,3 +13,8 @@ Public source availability is not itself permission to redistribute every server
 Users install and authenticate their own native clients. AGENT HUB does not sell model usage or collect subscription credentials. Each provider's current usage terms and limits apply.
 
 The icon was AI-generated for AGENT HUB and is included under this repository's MIT license. Product names identify compatible external tools and do not imply endorsement.
+
+## markdown-it 15.0.2
+
+MIT license. Source: https://github.com/markdown-it/markdown-it
+Browser bundle vendored from the npm 15.0.2 package (SHA-512 verified against registry metadata). License: `src/agent_hub/static/markdown-it.LICENSE.txt`. No runtime CDN dependency.

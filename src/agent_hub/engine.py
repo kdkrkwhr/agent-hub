@@ -11,6 +11,7 @@ import uuid
 from . import adapters
 from .config import Config,atomic_json
 from .coral import Peer
+from .collaboration import Collaboration
 
 class Hub:
     def __init__(self,root):
@@ -29,6 +30,7 @@ class Hub:
         self.db.commit()
         self.threads=[];self.connected=False;self.error=None;self.updated=None
         self.active={};self.pool=concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        self.collaboration=Collaboration(self)
         self.demo=[];self.revision=0
         self.thread=threading.Thread(target=self.loop,daemon=True)
 
@@ -42,7 +44,9 @@ class Hub:
     def save(self,body):
         with self.lock:
             if self.active:raise ValueError('Stop or finish active jobs before changing settings.')
+            old_scope=self.scope(self.config.value or {})
             result=self.config.save(body)
+            self.collaboration.suspend(old_scope,'연결 설정이 변경되었습니다.')
             self.revision+=1;self.threads=[];self.connected=False;self.error=None
             self.db.execute("UPDATE jobs SET status='cancelled',error='Configuration changed.' WHERE status='pending'");self.db.commit()
             if self.config.value['mode']=='demo':self.seed_demo()
@@ -64,10 +68,11 @@ class Hub:
 
     def snapshot(self):
         with self.lock:
-            return {'configured':self.config.value is not None,'config':self.config.public(),
+            rounds,collab_jobs=self.collaboration.snapshot(self.scope(self.config.value or {}))
+            return {'collaboration':rounds,'collaboration_jobs':collab_jobs,'configured':self.config.value is not None,'config':self.config.public(),
                 'connected':self.connected,'error':self.error,'updated':self.updated,
                 'threads':self.threads,'jobs':[dict(r) for r in self.db.execute(
-                    'SELECT id,tid,agent,status,attempt,started,ended,error FROM jobs ORDER BY rowid DESC LIMIT 80')],
+                    "SELECT id,tid,agent,status,attempt,started,ended,error FROM jobs WHERE scope=? AND status NOT IN ('baseline','observed') ORDER BY rowid DESC LIMIT 80",(self.scope(self.config.value or {}),))],
                 'active':list(self.active),'data_directory':str(self.root)}
 
     def new_thread(self,title):
@@ -115,6 +120,7 @@ class Hub:
             self.db.commit()
             if peer:peer.tool('coral_close_thread',threadId=tid,summary=summary.strip())
             else:current['state']='closed'
+            self.collaboration.close_thread(tid,scope)
             self.db.execute('UPDATE archives SET confirmed=1 WHERE scope=? AND tid=?',(scope,tid))
             self.db.execute("UPDATE jobs SET status='cancelled',ended=?,error='Channel closed.' WHERE scope=? AND tid=? AND status IN ('pending','ready')",(time.time(),scope,tid))
             self.db.commit()
@@ -140,10 +146,26 @@ class Hub:
         with self.lock:
             cfg=self.config.value
             if not cfg or cfg['mode']!='coral':raise ValueError('Connect Coral first.')
-            cfg['automatic']=enabled;atomic_json(self.config.path,cfg)
+            if enabled and not cfg['automatic']:
+                # Snapshot while still observing: enabling must never replay old mentions.
+                threads=self.peer(cfg['observer'],cfg).threads()
+                self.ingest(threads,cfg)
+                self.collaboration.ingest(threads,cfg)
+            updated=dict(cfg,automatic=enabled);atomic_json(self.config.path,updated)
+            self.config.value=updated
+            self.revision+=1
+            if not enabled:
+                self.observe_pending(updated)
+                self.collaboration.suspend(self.scope(updated),'허브 실행을 중지했습니다.')
+
+    def observe_pending(self,cfg):
+        self.db.execute("UPDATE jobs SET status='observed',ended=? WHERE scope=? AND status='pending'",
+            (time.time(),self.scope(cfg)))
+        self.db.commit()
 
     def ingest(self,threads,cfg):
         scope=self.scope(cfg)
+        if not cfg['automatic']:self.observe_pending(cfg)
         baseline=self.db.execute('SELECT 1 FROM baselines WHERE scope=?',(scope,)).fetchone() is None
         for t in threads:
             if t.get('state')=='closed':continue
@@ -154,11 +176,14 @@ class Hub:
                     if sender==agent:continue
                     key=hashlib.sha256(json.dumps([scope,t['threadId'],msg,agent],sort_keys=True).encode()).hexdigest()[:24]
                     self.db.execute('INSERT OR IGNORE INTO jobs VALUES (?,?,?,?,?,?,1,NULL,NULL,NULL,NULL)',
-                        (key,scope,t['threadId'],agent,json.dumps(msg,ensure_ascii=False),'baseline' if baseline else 'pending'))
+                        (key,scope,t['threadId'],agent,json.dumps(msg,ensure_ascii=False),'baseline' if baseline else ('pending' if cfg['automatic'] else 'observed')))
         self.db.execute('INSERT OR IGNORE INTO baselines VALUES (?)',(scope,));self.db.commit()
 
     def cancel(self,key):
         with self.lock:
+            task=self.db.execute('SELECT round_id FROM collab_tasks WHERE id=?',(key,)).fetchone()
+            if task:
+                self.collaboration.end(task['round_id'],'cancelled','사용자가 협업을 취소했습니다.');self.db.commit();return
             row=self.db.execute('SELECT * FROM jobs WHERE id=?',(key,)).fetchone()
             if not row:raise ValueError('Job not found.')
             for active in self.active.values():
@@ -167,17 +192,26 @@ class Hub:
                 self.db.execute("UPDATE jobs SET status='cancelled',ended=? WHERE id=?",(time.time(),key));self.db.commit()
             else:raise ValueError('Only pending or running jobs can be cancelled.')
 
+    def cancel_round(self,rid):
+        with self.lock:
+            r=self.collaboration.get(rid)
+            if not r or r['scope']!=self.scope(self.config.value or {}):raise ValueError('Collaboration not found.')
+            self.collaboration.end(rid,'cancelled','사용자가 협업을 중지했습니다.');self.db.commit()
+
     def retry(self,key):
         with self.lock:
+            if self.db.execute('SELECT 1 FROM collab_tasks WHERE id=?',(key,)).fetchone():raise ValueError('종료된 협업은 새 메시지로 다시 요청해 주세요.')
             row=self.db.execute('SELECT * FROM jobs WHERE id=?',(key,)).fetchone()
             if not row or row['status'] not in ('failed','cancelled'):raise ValueError('Only failed or cancelled jobs can be retried.')
+            if not self.config.value['automatic']:raise ValueError('관찰 모드에서는 재실행할 수 없습니다. 허브 자동 응답을 먼저 켜 주세요.')
             if row['scope']!=self.scope(self.config.value):raise ValueError('This job belongs to different connection settings.')
             if any(t['threadId']==row['tid'] and t.get('state')=='closed' for t in self.threads):raise ValueError('Channel is closed.')
             self.db.execute("UPDATE jobs SET status='pending',attempt=attempt+1,error=NULL,result=NULL,started=NULL,ended=NULL WHERE id=?",(key,));self.db.commit()
 
     def result(self,key):
         with self.lock:
-            row=self.db.execute('SELECT result FROM jobs WHERE id=?',(key,)).fetchone()
+            row=self.db.execute('SELECT result FROM collab_tasks WHERE id=?',(key,)).fetchone()
+            if row is None:row=self.db.execute('SELECT result FROM jobs WHERE id=?',(key,)).fetchone()
             if not row:raise ValueError('Job not found.')
             return json.loads(row['result']) if row['result'] else None
 
@@ -246,7 +280,7 @@ class Hub:
                         if revision!=self.revision:continue
                         threads=self.archived_threads(threads,cfg)
                         self.threads=threads;self.connected=True;self.error=None;self.updated=time.time()
-                        if cfg['mode']=='coral':self.ingest(threads,cfg);self.work(cfg,threads)
+                        if cfg['mode']=='coral':self.collaboration.ingest(threads,cfg);self.collaboration.tick(cfg,threads)
             except Exception:
                 with self.lock:self.connected=False;self.error='Coral connection unavailable. Retrying; check connection settings.'
             self.stop.wait(3)

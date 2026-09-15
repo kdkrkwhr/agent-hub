@@ -24,3 +24,21 @@ No macOS/Linux native-client run or installer test has been performed. No remote
 ## Manual installation guide check
 
 On 2026-09-15, all PowerShell blocks in `docs/coral-setup.md` passed syntax parsing. The guide created a separate local server and four identities, and all four MCP endpoints responded. This check used the existing reference JAR on an isolated port and did not repeat the network download or invoke models. The test server was terminated afterward.
+
+## Internal collaboration engine — 2026-09-15
+
+- Python suite: 32 tests passed, including 12 collaboration tests.
+- Scripted full scheduler: 11 calls for independent exploration, assignment, execution, synthesis, and unanimous review; only one public final delivery.
+- Scripted objections: assigned issue investigation, revised candidate and all-member reapproval; max-version block, wrong-hash rejection, duplicate-delivery suppression, deadline, close/cancel, restart behavior and late user guidance covered.
+- Native Windows smoke: Claude, Codex and Cursor completed all 11 steps on a bounded arithmetic task, approved the same V1 proposal, and terminated with zero active workers. Public Coral channel contained exactly one user request and one final result. This verifies transport and workflow, not quality on complex research tasks.
+- Browser smoke: internal discussion, roles/inbox counts and phase status visible at 1320px and 480px widths without page overflow.
+- Existing external paid dispatcher was paused; live execution now uses the project-owned hub engine. Local launcher was redirected. These machine-specific settings are not part of the public package.
+- Unvalidated: cross-platform native CLI behavior, interrupted network delivery under real failure, and complex native-model objection resolution (the latter is covered by scripted tests only).
+
+## 2026-09-15 adaptive inbox regression
+
+- 38 unit/integration tests pass, including immediate candidate review before slow peers finish, six-call direct-answer scheduling, addressed consultation, stale approvals after new evidence, and one bounded plan-format correction. JavaScript syntax check passes.
+- Native Claude/Codex/Cursor test used the original user arithmetic request without success criteria or JSON instructions in the user message. Round `4c8624b37a3e4bad11235f22` completed with six calls, all three explicit APPROVE votes for the same proposal hash, and one delivered terminal result: sum 21, product 180.
+- Same request took 216 seconds with the previous mandatory stages and 114 seconds with immediate candidate review in this pair of runs. This is a single comparison, not a general performance guarantee.
+- Cursor wall times were 68.3s and 46.1s; its reported API durations were 11.43s and 14.07s. Logs do not identify which CLI startup/connection/exit component accounts for the difference. Discord mirroring is a separate polling process and not an awaited Hub execution step.
+- Native consultation/objection paths are covered by scripted tests, not by this simple arithmetic live run. Native CLIs still start per call; persistent sessions and token streaming are not implemented.

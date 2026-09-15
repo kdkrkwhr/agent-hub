@@ -38,7 +38,7 @@ def make_server(hub,port):
                 try:return self.reply(200,hub.result(parse_qs(urlsplit(self.path).query).get('id',[''])[0]))
                 except ValueError as e:return self.reply(404,{'error':str(e)})
             name='index.html' if path=='/' else path.lstrip('/')
-            allowed={'index.html','app.js','style.css','icon.png','icon.ico'}
+            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js'}
             if name not in allowed:return self.reply(404,{'error':'Not found.'})
             self.reply(200,(STATIC/name).read_bytes(),mimetypes.guess_type(name)[0] or 'application/octet-stream')
         def do_POST(self):
@@ -55,6 +55,7 @@ def make_server(hub,port):
                 elif self.path=='/api/thread/close':hub.close_thread(body.get('threadId'),body.get('summary'));result={'ok':True}
                 elif self.path=='/api/message':hub.message(body.get('threadId'),body.get('text'),body.get('mentions',[]));result={'ok':True}
                 elif self.path=='/api/automatic':hub.set_automatic(body.get('enabled'));result={'ok':True}
+                elif self.path=='/api/collaboration/cancel':hub.cancel_round(body.get('id'));result={'ok':True}
                 elif self.path=='/api/cancel':hub.cancel(body.get('id'));result={'ok':True}
                 elif self.path=='/api/retry':hub.retry(body.get('id'));result={'ok':True}
                 else:return self.reply(404,{'error':'Not found.'})

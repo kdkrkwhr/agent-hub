@@ -26,7 +26,7 @@ class HubTests(unittest.TestCase):
         self.temp.cleanup()
 
     def coral_config(self):
-        return self.hub.config.prepare({'mode':'coral','agents':['codex'],
+        return self.hub.config.prepare({'mode':'coral','agents':['codex'],'automatic':True,
             'endpoints':{'ops':'http://localhost:5555/secret-ops','codex':'http://localhost:5555/secret-codex'}})
 
     def thread(self,messages):
@@ -112,6 +112,30 @@ class HubTests(unittest.TestCase):
             self.hub.work(cfg,[{'threadId':'t1','state':'closed','messages':[]}])
             peer.assert_not_called()
         self.assertEqual(self.hub.db.execute('SELECT status FROM jobs').fetchone()[0],'cancelled')
+
+    def test_observe_mode_does_not_queue_or_replay(self):
+        cfg=self.coral_config();self.hub.config.value=cfg
+        self.hub.ingest([],cfg)
+        threads=[self.thread([self.msg('old pending')])];self.hub.ingest(threads,cfg)
+        self.hub.set_automatic(False)
+        threads[0]['messages'].append(self.msg('seen while off'))
+        self.hub.ingest(threads,self.hub.config.value)
+        self.assertEqual([r[0] for r in self.hub.db.execute('SELECT status FROM jobs')],['observed','observed'])
+        self.assertEqual(self.hub.snapshot()['jobs'],[])
+        # A message arriving between polls must also be consumed before enabling.
+        threads[0]['messages'].append(self.msg('before enable'))
+        with patch.object(self.hub,'peer') as peer:
+            peer.return_value.threads.return_value=threads
+            self.hub.set_automatic(True)
+        threads[0]['messages'].append(self.msg('after enable'))
+        self.hub.ingest(threads,self.hub.config.value)
+        self.assertEqual([r[0] for r in self.hub.db.execute('SELECT status FROM jobs ORDER BY rowid')],['observed','observed','observed','pending'])
+
+    def test_enable_failure_stays_in_observe_mode(self):
+        cfg=self.coral_config();cfg['automatic']=False;self.hub.config.value=cfg
+        with patch.object(self.hub,'peer',side_effect=TransportError('offline')):
+            with self.assertRaises(TransportError):self.hub.set_automatic(True)
+        self.assertFalse(self.hub.config.value['automatic'])
 
     def test_secret_redaction_and_rotation(self):
         cfg=self.coral_config()
