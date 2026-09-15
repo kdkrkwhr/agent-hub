@@ -65,7 +65,10 @@ class Collaboration:
           (key,rid,agent,'consult',r['version'],'pending',time.time()))
 
     def start(self,scope,t,msg,cfg):
-        rid=digest(pack([scope,t['threadId'],msg]))[:24];team=cfg['agents'];lead='claude' if 'claude' in team else team[0]
+        rid=digest(pack([scope,t['threadId'],msg]))[:24]
+        team=list(dict.fromkeys(a for a in cfg['agents'] if a in (msg.get('mentionAgentNames') or [])))
+        if not team:return None
+        lead='claude' if 'claude' in team else team[0]
         self.db.execute('INSERT INTO collab_rounds VALUES (?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,0,0,0)',
           (rid,scope,t['threadId'],msg['messageText'],pack(team),lead,'explore','active','','','{}',time.time(),time.time()+2700,''))
         self.event(rid,cfg['observer'],'request',msg['messageText']);self.enqueue(rid,'explore',team)

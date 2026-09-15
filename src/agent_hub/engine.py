@@ -52,6 +52,28 @@ class Hub:
             if self.config.value['mode']=='demo':self.seed_demo()
             return result
 
+    def model_info(self):
+        from .models import info
+        with self.lock:
+            cfg=dict(self.config.value or {})
+            tasks=[dict(r) for r in self.db.execute("SELECT id,agent,status,started FROM collab_tasks ORDER BY started DESC LIMIT 160")]
+        return info(self.root,cfg,tasks)
+
+    def save_models(self,body):
+        from .models import validate
+        values=validate(body.get('models'))
+        with self.lock:
+            if not self.config.value:raise ValueError('Complete setup first.')
+            value={**self.config.value,'models':values}
+            atomic_json(self.config.path,value);self.config.value=value
+        return self.model_info()
+
+    def refresh_models(self):
+        from .models import refresh_catalog
+        with self.lock:cfg=dict(self.config.value or {})
+        warnings=refresh_catalog(self.root,cfg)
+        return {'models':self.model_info(),'warnings':warnings}
+
     def test_connection(self,body):
         cfg=self.config.prepare(body)
         if cfg['mode']=='demo':return {'ok':True,'message':'Demo needs no accounts or server.'}

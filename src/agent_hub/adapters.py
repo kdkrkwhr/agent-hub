@@ -50,19 +50,25 @@ def parse_reply(text):
 
 def command(name,config,folder):
     base=[config['executables'][name]] if name in config.get('executables',{}) else discover(name)
+    from .models import validate
+    choice=validate(config.get('models',{})).get(name)
+    model_args=['--model',choice] if choice else []
     if not base:raise RuntimeError(f'{name} CLI not found. Install it and sign in first.')
     if name=='claude':
-        return base+['-p','--tools','Read,Glob,Grep','--allowedTools','Read,Glob,Grep',
+        return base+model_args+['-p','--tools','Read,Glob,Grep','--allowedTools','Read,Glob,Grep',
               '--permission-mode','dontAsk','--strict-mcp-config','--output-format','json',
               '--no-session-persistence','--disable-slash-commands','--no-chrome']
     if name=='cursor':
-        return base+['-p','--mode','ask','--trust','--workspace',str(folder),'--output-format','json']
-    return base+['exec','--skip-git-repo-check','--ephemeral','--sandbox','read-only',
+        return base+model_args+['-p','--mode','ask','--trust','--workspace',str(folder),'--output-format','json']
+    return base+['exec']+model_args+['--skip-git-repo-check','--ephemeral','--sandbox','read-only',
                 '-c','approval_policy="never"','-c','mcp_servers.coral.enabled=false',
                 '--cd',str(folder),'--json','--output-last-message',str(folder/'final.txt'),'-']
 
 def execute(name,config,context,incoming,folder,cancel,live):
     folder.mkdir(parents=True,exist_ok=True)
+    from .models import native
+    from .config import atomic_json
+    atomic_json(folder/'model-info.json',{'requested':config.get('models',{}).get(name,''),'native_hint':native(name)})
     from .collaboration import instructions
     policy=instructions(context['collaboration']) if 'collaboration' in context else consensus_policy(config['agents'])
     prompt=(f'You are {name.upper()}, a separate AGENT HUB worker. '

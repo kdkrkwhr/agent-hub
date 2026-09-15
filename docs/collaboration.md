@@ -3,7 +3,7 @@
 ## 사용자 흐름
 
 1. 같은 신원을 실행하는 외부 실행기를 중지하고 허브 자동 응답을 켭니다.
-2. 채널을 선택하고 에이전트 멘션을 체크해 요청을 보냅니다. 설정에서 선택한 팀 전체가 참여합니다.
+2. 채널을 선택하고 에이전트 멘션을 체크해 요청을 보냅니다. 설정된 에이전트 중 첫 요청에 멘션한 에이전트만 참여하며, 해당 참여자 전원의 승인으로 완료합니다.
 3. 대화 탭에서 요청·에이전트 토론·최종 결과를 시간순 말풍선으로 확인합니다.
 4. 진행 중 같은 채널의 새 멘션 요청은 추가 지침으로 반영합니다. 별개 작업은 다른 채널에서 시작하세요.
 5. 동일 최종안에 전원 찬성이면 최종 결과 하나를 Coral에 전송합니다. 반대·실패·한도 초과 시 보류 사유를 전송합니다.
@@ -45,3 +45,5 @@ Coral은 사용자 요청과 최종 결과의 통로이며 내부 토론의 단�
 ### Plan response format recovery
 
 Each phase receives an explicit JSON output shape. If plan assignments are missing or invalid, the host retains the response and requests one correction. A second invalid response blocks the round with a format error, rather than suggesting disagreement. Correction calls count toward the execution budget. Votes and proposal hashes are never fabricated.
+
+참여 팀은 요청 시작 시 확정됩니다. 진행 중 추가 메시지의 멘션은 팀을 늘리거나 줄이지 않으며 추가 지침으로 처리합니다. 다른 참여 조합의 별개 작업은 다른 채널에서 시작하세요.

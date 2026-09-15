@@ -84,7 +84,9 @@ class Config:
             workspace=str(p)
         automatic=body.get('automatic',False)
         if not isinstance(automatic,bool):raise ValueError('Invalid automatic mode.')
-        config={'mode':mode,'agents':list(dict.fromkeys(names)), 'observer':observer,
+        from .models import validate
+        models=validate(body.get('models',old.get('models',{})))
+        config={'models':models,'mode':mode,'agents':list(dict.fromkeys(names)), 'observer':observer,
                 'url_file':url_file,'endpoints':endpoints,'executables':commands,
                 'workspace':workspace,'automatic':automatic if mode=='coral' else False}
         if mode=='coral':

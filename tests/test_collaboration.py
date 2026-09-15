@@ -12,8 +12,8 @@ class CollaborationTests(unittest.TestCase):
   self.cfg=self.hub.config.prepare({'mode':'coral','automatic':True,'agents':['claude','codex','cursor'],'endpoints':{a:'http://localhost:5555/'+a for a in ['ops','claude','codex','cursor']}})
   self.hub.config.value=self.cfg;self.c.ingest([],self.cfg)
  def tearDown(self):self.hub.close();self.temp.cleanup()
- def request(self,text='Investigate',timestamp=1):
-  t={'threadId':'t','state':'open','messages':[{'sendingAgentName':'ops','messageText':text,'messageTimestamp':timestamp,'mentionAgentNames':['claude']}]}
+ def request(self,text='Investigate',timestamp=1,mentions=None):
+  t={'threadId':'t','state':'open','messages':[{'sendingAgentName':'ops','messageText':text,'messageTimestamp':timestamp,'mentionAgentNames':self.cfg['agents'] if mentions is None else mentions}]}
   self.c.ingest([t],self.cfg);return self.hub.db.execute('SELECT id FROM collab_rounds ORDER BY created DESC LIMIT 1').fetchone()[0]
  def task(self,agent=None):
   query="SELECT * FROM collab_tasks WHERE status='pending'";args=()
@@ -22,7 +22,7 @@ class CollaborationTests(unittest.TestCase):
  def reply(self,task,decision='APPROVE',**extra):
   ctx=self.c.task_context(task)
   self.hub.db.execute("UPDATE collab_tasks SET status='running',input=?,started=? WHERE id=?",(json.dumps(ctx),time.time(),task['id']))
-  result={'reply':'Concrete evidence and solution','round':task['round_id'],'task':task['id'],'version':task['version'],'decision':decision,'proposal_hash':self.c.get(task['round_id'])['digest'],'assignments':{a:a+' independent task' for a in self.cfg['agents']},**extra}
+  result={'reply':'Concrete evidence and solution','round':task['round_id'],'task':task['id'],'version':task['version'],'decision':decision,'proposal_hash':self.c.get(task['round_id'])['digest'],'assignments':{a:a+' independent task' for a in ctx['team']},**extra}
   self.c.finish(task,result);self.hub.db.commit()
  def to_review(self,rid):
   for _ in range(20):
@@ -115,6 +115,31 @@ class CollaborationTests(unittest.TestCase):
     for a in list(self.hub.active.values()):a['future'].result(timeout=3)
     if self.c.get(rid)['status']=='agreed':break
    self.assertEqual(self.c.get(rid)['status'],'agreed');self.assertEqual(model.call_count,6);self.assertEqual(peer.return_value.tool.call_count,1)
+ def test_only_two_mentioned_agents_execute_and_approve(self):
+  rid=self.request(mentions=['codex','cursor','codex','unknown'])
+  self.assertEqual(json.loads(self.c.get(rid)['team']),['codex','cursor'])
+  self.assertEqual(self.c.get(rid)['lead'],'codex')
+  self.reply(self.task('codex'),candidate='Verified answer')
+  self.reply(self.task('cursor'))
+  self.reply(self.task('codex'));self.assertEqual(self.c.get(rid)['status'],'active')
+  self.reply(self.task('cursor'));self.assertEqual(self.c.get(rid)['status'],'agreed')
+  self.assertEqual({r[0] for r in self.hub.db.execute('SELECT agent FROM collab_tasks')},{'codex','cursor'})
+  rounds,_=self.c.snapshot(self.hub.scope(self.cfg))
+  self.assertEqual({v['agent'] for v in rounds[0]['votes']},{'codex','cursor'})
+ def test_single_mentioned_agent_completes_investigation_path(self):
+  rid=self.request(mentions=['cursor']);self.to_review(rid)
+  self.reply(self.task('cursor'));self.assertEqual(self.c.get(rid)['status'],'agreed')
+  self.assertEqual({r[0] for r in self.hub.db.execute('SELECT agent FROM collab_tasks')},{'cursor'})
+ def test_guidance_mentions_do_not_expand_existing_team(self):
+  rid=self.request(mentions=['claude','codex'])
+  self.request('Additional guidance',2,mentions=['cursor'])
+  self.assertEqual(json.loads(self.c.get(rid)['team']),['claude','codex'])
+  self.assertEqual(self.c.get(rid)['guidance'],1)
+  self.assertEqual(self.hub.db.execute('SELECT count(*) FROM collab_rounds').fetchone()[0],1)
+ def test_no_valid_mentions_start_no_round(self):
+  for n,mentions in enumerate([[],['unknown'],['ops']]):
+   self.c.ingest([{'threadId':'t','state':'open','messages':[{'sendingAgentName':'ops','messageText':'No valid mention','mentionAgentNames':mentions,'messageTimestamp':n}]}],self.cfg)
+  self.assertEqual(self.hub.db.execute('SELECT count(*) FROM collab_rounds').fetchone()[0],0)
  def test_stale_vote_blocks(self):
   rid=self.request();self.to_review(rid);self.reply(self.task(),proposal_hash='wrong')
   self.assertEqual(self.c.get(rid)['status'],'blocked')

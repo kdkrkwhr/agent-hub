@@ -196,6 +196,14 @@ class HubTests(unittest.TestCase):
         with patch.object(peer,'call',return_value={'contents':[{'text':'# State\n```json\n'+json.dumps(threads)+'\n```'}]}):
             self.assertEqual(peer.threads(),threads)
 
+    def test_native_state_without_threads_is_connected_empty_session(self):
+        peer=object.__new__(Peer)
+        for agents in [[],[{'agentName':'codex','agentConnected':True}]]:
+            text='# General\nYou are an agent named ops.\n# Agents\n```json\n'+json.dumps(agents)+'\n```\nSince you are in close contact with these agents.'
+            with patch.object(peer,'call',return_value={'contents':[{'text':text}]}):self.assertEqual(peer.threads(),[])
+            with patch.object(peer,'call',return_value={'contents':[{'text':text+'\n# Threads\n```json\n[broken'}]}):
+                with self.assertRaises(TransportError):peer.threads()
+
     def test_reply_parser(self):
         self.assertEqual(parse_reply('Answer:\n```json\n{"reply":"hello","mentions":["cursor"]}\n```')['mentions'],['cursor'])
         with self.assertRaises(RuntimeError):parse_reply(' ')

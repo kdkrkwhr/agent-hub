@@ -50,14 +50,21 @@ class Peer:
 
     def threads(self):
         result=self.call('resources/read',{'uri':'coral://state'})
-        found=False
+        found=False;empty_native=False;thread_section=False
         for item in result.get('contents',[]):
             text=item.get('text','')
+            thread_section=thread_section or bool(re.search(r'^#{1,6}\s+.*threads?\b',text,re.M|re.I))
             for match in re.finditer(r'```json\s*',text):
                 try:data,_=json.JSONDecoder().raw_decode(text[match.end():])
                 except ValueError:continue
+                headings=list(re.finditer(r'^#{1,6}\s+(.+)$',text[:match.start()],re.M))
+                heading=headings[-1].group(1).strip().lower() if headings else ''
+                if heading=='agents':
+                    if isinstance(data,list) and all(isinstance(a,dict) and isinstance(a.get('agentName'),str) for a in data) and text.startswith('# General\n'):
+                        empty_native=True
+                    continue
                 if isinstance(data,list) and not data:found=True
                 elif isinstance(data,list) and all(isinstance(t,dict) and 'threadId' in t for t in data):
                     return data
-        if found:return []
+        if found or (empty_native and not thread_section):return []
         raise TransportError('Unsupported Coral state format. Check the compatibility documentation.')

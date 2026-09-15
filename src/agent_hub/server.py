@@ -31,6 +31,7 @@ def make_server(hub,port):
             if not self.allowed():return self.reply(403,{'error':'Forbidden origin or host.'})
             path=urlsplit(self.path).path
             if path=='/api/state':return self.reply(200,hub.snapshot())
+            if path=='/api/models':return self.reply(200,hub.model_info())
             if path=='/api/bootstrap':
                 from .adapters import inventory
                 return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.1.0'})
@@ -38,7 +39,7 @@ def make_server(hub,port):
                 try:return self.reply(200,hub.result(parse_qs(urlsplit(self.path).query).get('id',[''])[0]))
                 except ValueError as e:return self.reply(404,{'error':str(e)})
             name='index.html' if path=='/' else path.lstrip('/')
-            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js'}
+            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js','office.js'}
             if name not in allowed:return self.reply(404,{'error':'Not found.'})
             self.reply(200,(STATIC/name).read_bytes(),mimetypes.guess_type(name)[0] or 'application/octet-stream')
         def do_POST(self):
@@ -49,7 +50,9 @@ def make_server(hub,port):
                 if self.headers.get_content_type()!='application/json':raise ValueError('Expected JSON.')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Expected an object.')
-                if self.path=='/api/config':result=hub.save(body)
+                if self.path=='/api/models':result=hub.save_models(body)
+                elif self.path=='/api/models/refresh':result=hub.refresh_models()
+                elif self.path=='/api/config':result=hub.save(body)
                 elif self.path=='/api/test':result=hub.test_connection(body)
                 elif self.path=='/api/thread':result={'id':hub.new_thread(body.get('name'))}
                 elif self.path=='/api/thread/close':hub.close_thread(body.get('threadId'),body.get('summary'));result={'ok':True}

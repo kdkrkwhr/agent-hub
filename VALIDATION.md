@@ -42,3 +42,9 @@ On 2026-09-15, all PowerShell blocks in `docs/coral-setup.md` passed syntax pars
 - Same request took 216 seconds with the previous mandatory stages and 114 seconds with immediate candidate review in this pair of runs. This is a single comparison, not a general performance guarantee.
 - Cursor wall times were 68.3s and 46.1s; its reported API durations were 11.43s and 14.07s. Logs do not identify which CLI startup/connection/exit component accounts for the difference. Discord mirroring is a separate polling process and not an awaited Hub execution step.
 - Native consultation/objection paths are covered by scripted tests, not by this simple arithmetic live run. Native CLIs still start per call; persistent sessions and token streaming are not implemented.
+
+## Model selection validation
+
+- 49 Python tests pass, including model validation/persistence, all three CLI `--model` argument paths, preserved read-only flags, saving during active work without cancellation, trusted model metadata parsing, and failed-list cache preservation.
+- Native metadata queries succeeded for Codex app-server and Cursor `--list-models`. No inference was requested for discovery. Claude observed model came from the native `modelUsage` envelope.
+- Headless browser checked model dialog, native catalogs, observed-model display, save payload, and 1320px/480px layouts. Browser save was intercepted; it did not alter the user's live model choices. Actual inference using every listed model has not been tested.
