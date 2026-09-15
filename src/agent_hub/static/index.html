@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AGENT HUB RADIO</title><link rel="icon" href="/icon.ico"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside><div class="brand"><img src="/icon.png" alt=""><div>AGENT HUB <b>RADIO</b><small>YOUR AGENTS. ONE CHANNEL.</small></div></div><button id="new-thread" class="primary">＋ 새 채널</button><div class="section-label">CHANNELS <span id="channel-count">0</span></div><nav id="threads" aria-label="스레드 목록"></nav><div class="aside-foot"><button id="settings">연결 및 에이전트 설정</button><small>LOCAL-FIRST · v0.1.0 ALPHA</small></div></aside>
+<main><header><div><div class="eyebrow">COLLABORATION WORKSPACE</div><h1 id="title">전체 대화</h1><p id="subtitle">에이전트의 대화와 작업을 한곳에서 확인하세요.</p></div><span id="connection" class="connection">설정 대기</span></header>
+<section class="stats" id="agents" aria-label="에이전트 필터"></section>
+<div class="toolbar"><div class="tabs"><button id="tab-chat" class="active">대화</button><button id="tab-jobs">작업 <span id="job-count">0</span></button></div><div class="controls"><input id="search" type="search" aria-label="대화 검색" placeholder="대화 검색…"><label><input id="autoscroll" type="checkbox" checked> 자동 스크롤</label><button id="automatic">자동 응답 꺼짐</button></div></div>
+<p id="notice" role="status">연결 설정을 시작하세요.</p>
+<section id="feed" aria-label="대화 타임라인"><div class="empty">아직 대화가 없습니다.</div></section>
+<section id="jobs" aria-label="작업 목록" hidden></section>
+<form id="composer"><div id="mentions" aria-label="받는 에이전트"></div><div class="compose-line"><textarea id="message" aria-label="메시지" placeholder="채널을 선택하고 에이전트에게 요청하세요." rows="2" maxlength="12000"></textarea><button type="submit" class="primary" id="send">보내기</button></div></form>
+<footer><span id="updated">연결 대기 중</span><span>3초 갱신 · 로컬 데이터 저장</span></footer></main>
+<dialog id="setup"><form id="setup-form"><div class="dialog-header"><div class="eyebrow">GET CONNECTED</div><h2>나만의 에이전트 팀 만들기</h2><p>사용할 에이전트를 고르고, 같은 Coral 채널에 연결하세요.</p></div>
+<fieldset><legend>01 · 연결 방식</legend><div class="choice"><label><input type="radio" name="mode" value="demo" checked> 데모로 둘러보기 <small>설치·로그인 없이 화면과 메시지 흐름 체험</small></label><label><input type="radio" name="mode" value="coral"> 기존 Coral 연결 <small>사용자 소유의 Coral 서버와 공식 CLI 사용</small></label></div></fieldset>
+<fieldset><legend>02 · 사용할 에이전트</legend><div id="provider-options"></div><p class="hint">로그인은 각 공식 CLI에서 직접 진행합니다. AGENT HUB는 계정 비밀번호를 받지 않습니다.</p></fieldset>
+<fieldset id="coral-settings" hidden><legend>03 · Coral 연결 정보</legend><label>허브의 Coral 신원 <input id="observer" value="ops" placeholder="hub 또는 ops" maxlength="40"></label><p class="hint">허브와 자동 작업자는 서로 다른 신원을 사용합니다. 선택한 에이전트와 허브 신원은 Coral 세션에 미리 등록되어 있어야 합니다.</p><label>갱신되는 URL 파일 경로 (선택)<input id="url-file" placeholder="예: C:\coral\coral-urls.txt"></label><p class="hint">파일 형식: 이름|MCP_URL. 파일을 매번 다시 읽어 주소 교체를 따라갑니다. 파일이 없다면 아래에 각 MCP URL을 입력하세요.</p><div id="endpoint-fields"></div><label>읽기 전용 프로젝트 폴더 (선택)<input id="workspace" placeholder="분석할 프로젝트 경로"></label><label class="inline"><input id="enable-auto" type="checkbox"> 멘션을 받으면 선택한 CLI를 자동 실행</label><p class="hint">별도 작업 세션에서 읽기·분석·답변을 수행합니다. 계정 사용량을 소비하며 기존 IDE 대화를 이어받지 않습니다. 동일 신원을 처리하는 다른 실행기는 먼저 중지하세요.</p><button id="test-connection" type="button">연결 테스트</button></fieldset>
+<p id="setup-status" role="status"></p><div class="dialog-actions"><button id="close-setup" type="button">닫기</button><button id="save-setup" type="submit" class="primary">시작하기</button></div></form></dialog>
+<dialog id="create-channel"><form id="channel-form"><h2>새 채널</h2><label>채널 이름<input id="channel-name" required maxlength="120" placeholder="예: 프로젝트 설계 검토"></label><div class="dialog-actions"><button type="button" id="cancel-channel">취소</button><button type="submit" class="primary">만들기</button></div></form></dialog>
+<dialog id="result-dialog"><h2>작업 결과</h2><pre id="result-text"></pre><button id="close-result">닫기</button></dialog>
+</body></html>
