@@ -82,12 +82,18 @@ def execute(name,config,context,incoming,folder,cancel,live):
         f'Read-only project path: {config.get("workspace") or "not configured"}.\n'
         +policy+
         'Recent thread context:\n'+json.dumps({} if 'collaboration' in context else context,ensure_ascii=False)[-60000:]+
-        '\nIncoming request:\n'+incoming)
+        ('' if 'collaboration' in context else '\nIncoming request:\n'+incoming))
     env=dict(os.environ);env.update(PYTHONUTF8='1',PYTHONIOENCODING='utf-8')
+    cli_command=command(name,config,folder)
+    if name=='claude' and 'collaboration' in context and name in config.get('zero_turn_agents',[]):
+        from .boundary import prepare
+        cli_command+=prepare(config,context,folder)
+        env.update(AGENT_HUB_BOUNDARY_DB=str(folder.parent.parent/'queue.sqlite3'),AGENT_HUB_BOUNDARY_TASK=context['collaboration']['task'])
+
     # Do not inspect, copy, or proxy authentication files. Native clients own their auth.
     kwargs={'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {'start_new_session':True}
     with (folder/'stdout.log').open('wb') as out,(folder/'stderr.log').open('wb') as err:
-        proc=subprocess.Popen(command(name,config,folder),cwd=folder,env=env,stdin=subprocess.PIPE,
+        proc=subprocess.Popen(cli_command,cwd=folder,env=env,stdin=subprocess.PIPE,
                               stdout=out,stderr=err,**kwargs)
         live(proc)
         try:

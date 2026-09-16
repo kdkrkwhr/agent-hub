@@ -86,7 +86,10 @@ class Config:
         if not isinstance(automatic,bool):raise ValueError('Invalid automatic mode.')
         from .models import validate
         models=validate(body.get('models',old.get('models',{})))
-        config={'models':models,'mode':mode,'agents':list(dict.fromkeys(names)), 'observer':observer,
+        zero_turn=body.get('zero_turn_agents',old.get('zero_turn_agents',[]))
+        if not isinstance(zero_turn,list) or any(n!='claude' for n in zero_turn):
+            raise ValueError('Tool-boundary delivery currently supports Claude only.')
+        config={'zero_turn_agents':[n for n in dict.fromkeys(zero_turn) if n in names],'models':models,'mode':mode,'agents':list(dict.fromkeys(names)), 'observer':observer,
                 'url_file':url_file,'endpoints':endpoints,'executables':commands,
                 'workspace':workspace,'automatic':automatic if mode=='coral' else False}
         if mode=='coral':

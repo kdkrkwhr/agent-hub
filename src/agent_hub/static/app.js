@@ -38,10 +38,10 @@ function setup(){
   const input=node('input');input.dataset.executable=name;input.placeholder='실행 파일 경로 직접 지정 (선택)';input.value=cfg?.executables?.[name]||'';
   box.append(label,input);holder.append(box);check.onchange=connectionFields;
  }
- $('observer').value=cfg?.observer||'ops';$('url-file').value=cfg?.url_file||'';$('workspace').value=cfg?.workspace||'';$('enable-auto').checked=cfg?.automatic||false;
+ $('observer').value=cfg?.observer||'ops';$('url-file').value=cfg?.url_file||'';$('workspace').value=cfg?.workspace||'';$('enable-auto').checked=cfg?.automatic||false;$('enable-boundary').checked=cfg?.zero_turn_agents?.includes('claude')||false;
  $('close-setup').hidden=!cfg;$('setup-status').textContent='';$('endpoint-fields').replaceChildren();connectionFields();$('setup').showModal();
 }
-function formConfig(){return {mode:mode(),agents:names(),observer:$('observer').value,url_file:$('url-file').value,workspace:$('workspace').value,automatic:$('enable-auto').checked,
+function formConfig(){return {zero_turn_agents:$('enable-boundary').checked&&names().includes('claude')?['claude']:[],mode:mode(),agents:names(),observer:$('observer').value,url_file:$('url-file').value,workspace:$('workspace').value,automatic:$('enable-auto').checked,
  endpoints:Object.fromEntries([...document.querySelectorAll('[data-endpoint]')].map(e=>[e.dataset.endpoint,e.value])),executables:Object.fromEntries([...document.querySelectorAll('[data-executable]')].map(e=>[e.dataset.executable,e.value]))};}
 let channelPrefs={},prefsKey='';
 let readKey='',readMarks={},openingChannel=false,serverOffline=false;
@@ -99,6 +99,7 @@ function refreshAgentProgress(){
  document.querySelectorAll('[data-progress-agent]').forEach(el=>{const [state,label]=agentStatus(el.dataset.progressAgent);el.textContent=label;el.closest('button').dataset.status=state;});
 }
 function renderParticipants(){
+ document.querySelectorAll('[data-mention]').forEach(check=>{const status=check.closest('label').querySelector('.mention-selection');if(status)status.textContent=check.checked?'선택됨':'선택';});
  const hint=$('participant-hint'),t=snapshot?.threads?.find(t=>t.threadId===selected);
  if(!t){hint.textContent='채널을 선택한 뒤 참여할 에이전트를 체크하세요.';return;}
  if(t.state==='closed'){hint.textContent='닫힌 채널 · 읽기 전용';return;}
@@ -146,7 +147,7 @@ function threadMessages(thread){
   if(terminal&&e.kind==='agreed'&&r.votes?.length)text+='\n\n**최종안 승인 기록**\n'+r.votes.map(v=>`- ${v.agent.toUpperCase()}: V${v.version} ${v.decision==='APPROVE'?'승인':'반대'}`).join('\n');
   if(e.kind==='plan'&&Object.keys(r.assignments).length)text+='\n\n**역할 분담**\n'+Object.entries(r.assignments).map(([a,task])=>`- ${a.toUpperCase()}: ${task}`).join('\n');
   messages.push({sendingAgentName:terminal?r.lead:e.sender,messageText:text,messageTimestamp:e.created,
-   mentionAgentNames:['question','issue'].includes(e.kind)?targets:[],eventKey:`collab:${r.id}:${e.id}`,
+   mentionAgentNames:['question','issue','notice'].includes(e.kind)?targets:[],eventKey:`collab:${r.id}:${e.id}`,
    phase:e.kind,final:terminal,issues:terminal?r.issues:[]});
  }
  return messages.sort((a,b)=>messageTime(a)-messageTime(b));
@@ -180,8 +181,9 @@ function render(){
  if(!messages.length)feed.append(node('div','empty','표시할 대화가 없습니다. 새 채널을 만들거나 검색 조건을 바꿔 보세요.'));
  for(const m of (selected?messages:messages.slice(-600))){const card=node('article','message'),head=node('div','message-head'),name=m.sendingAgentName||'unknown';
   if(selected&&!agent&&!q&&m.index===boundary){divider=node('div','unread-divider','여기부터 읽지 않은 메시지');feed.append(divider);}
-  head.append(node('span','sender',name.toUpperCase()));if(m.mentionAgentNames?.length)head.append(node('span','target','→ '+m.mentionAgentNames.join(', ')));head.append(node('time','',when(m.messageTimestamp)));
-  if(m.phase)head.append(node('span',m.final?'chat-phase final-phase':'chat-phase',m.final?(m.phase==='agreed'?'전원 승인 · 자동 제출':collaborationLabels[m.phase]):(collaborationLabels[m.phase]||{question:'질문',issue:'쟁점'}[m.phase]||'토론')));
+  head.append(node('span','sender',name.toUpperCase()));head.append(node('time','',when(m.messageTimestamp)));
+  if(m.mentionAgentNames?.length){const recipients=node('div','mention-recipients');recipients.setAttribute('aria-label','멘션 대상');recipients.append(node('span','mention-caption','받는 사람 →'));for(const target of [...new Set(m.mentionAgentNames)]){const chip=node('span','mention-chip','@'+String(target).toUpperCase());chip.dataset.agent=String(target).toLowerCase();recipients.append(chip);}head.append(recipients);}
+  if(m.phase)head.append(node('span',m.final?'chat-phase final-phase':'chat-phase',m.final?(m.phase==='agreed'?'전원 승인 · 자동 제출':collaborationLabels[m.phase]):(collaborationLabels[m.phase]||{question:'질문',issue:'쟁점',notice:'정보 공유'}[m.phase]||'토론')));
   const sender=name.toLowerCase(),identity=['claude','codex','cursor','ops','hub'].includes(sender)?sender:'other';
   card.dataset.sender=identity;card.dataset.messageKey=messageKey(m);
   const avatar=node('div','chat-avatar',{claude:'CL',codex:'CX',cursor:'CU',ops:'OP',hub:'나',other:'?'}[identity]);avatar.setAttribute('aria-hidden','true');
@@ -192,7 +194,7 @@ function render(){
  renderCollaborationStatus();
  $('feed').hidden=tab!=='chat';$('jobs').hidden=tab!=='jobs';$('composer').hidden=tab!=='chat';$('tab-chat').classList.toggle('active',tab==='chat');$('tab-jobs').classList.toggle('active',tab==='jobs');$('tab-office').classList.toggle('active',tab==='office');$('office').hidden=tab!=='office';document.body.classList.toggle('office-mode',tab==='office');officeView.update(snapshot,selected,serverOffline,tab==='office');
  const picked=[...document.querySelectorAll('[data-mention]:checked')].map(e=>e.dataset.mention);$('mentions').replaceChildren();
- for(const name of snapshot.config?.agents||[]){const label=node('label','inline'),check=node('input');check.type='checkbox';check.dataset.mention=name;check.checked=picked.includes(name);label.append(check,node('span','',name.toUpperCase()));$('mentions').append(label);}
+ for(const name of snapshot.config?.agents||[]){const label=node('label','inline mention-choice'),check=node('input');label.dataset.agent=name;check.type='checkbox';check.dataset.mention=name;check.checked=picked.includes(name);label.append(check,node('span','','@'+name.toUpperCase()),node('small','mention-selection',check.checked?'선택됨':'선택'));$('mentions').append(label);}
  const current=threads.find(t=>t.threadId===selected),closed=current?.state==='closed';
  $('rename-thread').hidden=!current;$('pin-thread').hidden=!current;$('pin-thread').textContent=channelPrefs[selected]?.pinned?'★ 고정 해제':'☆ 상단 고정';$('pin-thread').setAttribute('aria-pressed',String(!!channelPrefs[selected]?.pinned));
  $('close-thread').hidden=!current||closed;$('close-thread').disabled=busy;
