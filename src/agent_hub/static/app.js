@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 let csrf='',boot=null,snapshot=null,selected='',agent='',tab='chat',lastKey='',busy=false;
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
-const officeView=new AgentOffice($('office'),(tid,name)=>{saveFeedPosition();selected=tid;agent=name;tab='chat';lastKey='';render();});
+const officeView=new AgentOffice($('office'),(tid,name)=>{saveFeedPosition();selected=tid;agent=name;tab='chat';lastKey='';render();},openAgentWork);
 const when=value=>{const d=new Date(typeof value==='number'?value*1000:value);return Number.isNaN(d.getTime())?'':d.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});};
 const markdown=window.markdownit({html:false,breaks:true,linkify:false,typographer:false});
 // Remote images are labels only: reading a message must not trigger network requests.
@@ -38,10 +38,10 @@ function setup(){
   const input=node('input');input.dataset.executable=name;input.placeholder='실행 파일 경로 직접 지정 (선택)';input.value=cfg?.executables?.[name]||'';
   box.append(label,input);holder.append(box);check.onchange=connectionFields;
  }
- $('observer').value=cfg?.observer||'ops';$('url-file').value=cfg?.url_file||'';$('workspace').value=cfg?.workspace||'';$('enable-auto').checked=cfg?.automatic||false;$('enable-boundary').checked=cfg?.zero_turn_agents?.includes('claude')||false;
+ $('observer').value=cfg?.observer||'ops';$('url-file').value=cfg?.url_file||'';$('workspace').value=cfg?.workspace||'';$('enable-auto').checked=cfg?.automatic||false;$('enable-boundary').checked=cfg?.zero_turn_agents?.includes('claude')||false;$('enable-codex-boundary').checked=cfg?.zero_turn_agents?.includes('codex')||false;
  $('close-setup').hidden=!cfg;$('setup-status').textContent='';$('endpoint-fields').replaceChildren();connectionFields();$('setup').showModal();
 }
-function formConfig(){return {zero_turn_agents:$('enable-boundary').checked&&names().includes('claude')?['claude']:[],mode:mode(),agents:names(),observer:$('observer').value,url_file:$('url-file').value,workspace:$('workspace').value,automatic:$('enable-auto').checked,
+function formConfig(){return {zero_turn_agents:['claude','codex'].filter(n=>names().includes(n)&&$(n==='claude'?'enable-boundary':'enable-codex-boundary').checked),mode:mode(),agents:names(),observer:$('observer').value,url_file:$('url-file').value,workspace:$('workspace').value,automatic:$('enable-auto').checked,
  endpoints:Object.fromEntries([...document.querySelectorAll('[data-endpoint]')].map(e=>[e.dataset.endpoint,e.value])),executables:Object.fromEntries([...document.querySelectorAll('[data-executable]')].map(e=>[e.dataset.executable,e.value]))};}
 let channelPrefs={},prefsKey='';
 let readKey='',readMarks={},openingChannel=false,serverOffline=false;
@@ -78,6 +78,12 @@ function elapsedLabel(start,end=Date.now()/1000){
 function agentStatus(name){
  if(serverOffline)return ['offline','허브 연결 끊김'];
  if(snapshot.config?.mode==='demo')return ['idle','데모'];
+ const pipe=(snapshot.pipelines||[]).find(p=>p.tid===selected&&p.status==='active');
+ if(pipe){const run=pipe.tasks.find(t=>t.agent===name&&t.status==='running');return [run?'running':'idle',run?pipelineLabels[run.phase]+' 중':Object.values(pipe.roles).flat().includes(name)?'역할 작업 · 단계 대기':'이번 작업 미참여'];}
+ const poll=(snapshot.polls||[]).find(p=>p.tid===selected&&p.status==='active');
+ if(poll){const b=poll.ballots.find(b=>b.agent===name);return [b?.status==='running'?'running':'idle',b?({done:'투표 제출 · 비공개',pending:'투표 실행 대기',running:'독립 판단 중',failed:'투표 실패'}[b.status]||'투표 대기'):'이번 투표 미참여'];}
+ const latestPipe=(snapshot.pipelines||[]).find(p=>p.tid===selected);
+ if(latestPipe&&!['active'].includes(latestPipe.status)&&!snapshot.collaboration?.some(r=>r.tid===selected&&r.created>latestPipe.created)&&!(snapshot.polls||[]).some(p=>p.tid===selected&&p.created>latestPipe.created))return [latestPipe.status==='completed'?'done':latestPipe.status==='blocked'?'failed':'idle',Object.values(latestPipe.roles).flat().includes(name)?pipelineLabels[latestPipe.status]:'이번 작업 미참여'];
  const rounds=(snapshot.collaboration||[]).filter(r=>!selected||r.tid===selected),round=rounds[0];
  const jobs=(snapshot.jobs||[]).filter(j=>j.agent===name&&(!selected||j.tid===selected)&&(!selected||!round||j.round_id===round.id));
  if(selected&&round&&!round.team.includes(name))return ['idle','이번 요청 미참여'];
@@ -114,12 +120,12 @@ function renderParticipants(){
 const scrollPositions=new Map(),expandedMessages=new Set();let renderedView='';
 function saveFeedPosition(){
  const feed=$('feed');if(!renderedView||feed.hidden)return;
- const first=[...feed.querySelectorAll('.message')].find(el=>el.offsetTop+el.offsetHeight>feed.offsetTop+feed.scrollTop);
+ const first=[...feed.querySelectorAll('.message,.poll-card')].find(el=>el.offsetTop+el.offsetHeight>feed.offsetTop+feed.scrollTop);
  scrollPositions.set(renderedView,{top:feed.scrollTop,bottom:feed.scrollHeight-feed.scrollTop-feed.clientHeight<=24,anchor:first?.dataset.messageKey,offset:first?first.offsetTop-feed.offsetTop-feed.scrollTop:0});
 }
 function restoreFeedPosition(pos){
  const feed=$('feed');if(pos.bottom&&$('autoscroll').checked){feed.scrollTop=feed.scrollHeight;return;}
- const anchor=[...feed.querySelectorAll('.message')].find(el=>el.dataset.messageKey===pos.anchor);
+ const anchor=[...feed.querySelectorAll('.message,.poll-card')].find(el=>el.dataset.messageKey===pos.anchor);
  feed.scrollTop=anchor?anchor.offsetTop-feed.offsetTop-pos.offset:pos.top;
 }
 function messageBody(m){
@@ -134,6 +140,7 @@ function applyFontSize(value){
  document.documentElement.style.setProperty('--chat-font-size',sizes[choice]+'px');$('font-size').value=choice;
 }
 function messageTime(m){const v=m.messageTimestamp,t=typeof v==='number'?v*1000:Date.parse(v);return Number.isFinite(t)?t:0;}
+function voteTarget(v){return `${v.proposal_author?String(v.proposal_author).toUpperCase()+'의 ':'제안자 미확인 · '}V${v.version} 제안`;}
 function threadMessages(thread){
  const rounds=(snapshot?.collaboration||[]).filter(r=>r.tid===thread.threadId);
  const finalRounds=new Set(rounds.filter(r=>r.events.some(e=>['agreed','blocked','cancelled'].includes(e.kind))).map(r=>r.id));
@@ -143,14 +150,16 @@ function threadMessages(thread){
   const terminal=['agreed','blocked','cancelled'].includes(e.kind);
   let targets=[];try{targets=JSON.parse(e.targets||'[]');}catch{}
   let text=e.content;
-  if(e.vote)text=`**V${e.vote.version} · ${e.vote.decision==='APPROVE'?'승인합니다':'반대합니다'}**\n\n`+text;
-  if(terminal&&e.kind==='agreed'&&r.votes?.length)text+='\n\n**최종안 승인 기록**\n'+r.votes.map(v=>`- ${v.agent.toUpperCase()}: V${v.version} ${v.decision==='APPROVE'?'승인':'반대'}`).join('\n');
+  if(e.kind==='pipeline_context'){try{const work=JSON.parse(text);text='**이 대화가 참고하는 역할 작업**\n\n'+work.request+'\n\n상태: '+(pipelineLabels[work.status]||work.status)+' · 테스트: '+({skipped:'미실행',not_run:'미실행',passed:'통과',failed:'실패'}[work.test_status]||work.test_status)+'\n작업 ID: `'+work.id+'`\n\n결과 요약·인계 기록·작업 사본 경로를 참여 에이전트에게 전달했습니다.';}catch{}}
+  if(e.vote)text=`**${voteTarget(e.vote)}${e.vote.decision==='APPROVE'?'을 승인합니다':'에 반대합니다'}**\n\n`+text;
+  if(terminal&&e.kind==='agreed'&&r.votes?.length)text+='\n\n**최종안 승인 기록**\n'+r.votes.map(v=>`- ${v.agent.toUpperCase()}: ${voteTarget(v)} ${v.decision==='APPROVE'?'승인':'반대'}`).join('\n');
   if(e.kind==='plan'&&Object.keys(r.assignments).length)text+='\n\n**역할 분담**\n'+Object.entries(r.assignments).map(([a,task])=>`- ${a.toUpperCase()}: ${task}`).join('\n');
   messages.push({sendingAgentName:terminal?r.lead:e.sender,messageText:text,messageTimestamp:e.created,
    mentionAgentNames:['question','issue','notice'].includes(e.kind)?targets:[],eventKey:`collab:${r.id}:${e.id}`,
-   phase:e.kind,final:terminal,issues:terminal?r.issues:[]});
+   phase:e.kind,vote:e.vote,metrics:terminal?r.metrics:null,requirements:terminal?r.requirements:null,final:terminal,issues:terminal?r.issues:[]});
  }
- return messages.sort((a,b)=>messageTime(a)-messageTime(b));
+ messages.push(...pollMessages(thread),...pipelineMessages(thread));
+ return messages.filter(m=>!(snapshot.pipelines||[]).some(p=>p.tid===thread.threadId&&m.messageText?.includes(`[PIPELINE-FINAL:${p.id}]`))).filter(m=>!(snapshot.polls||[]).some(p=>p.tid===thread.threadId&&m.messageText?.includes(`[POLL-FINAL:${p.id}]`))).sort((a,b)=>messageTime(a)-messageTime(b));
 }
 function lastActivity(thread){return threadMessages(thread).reduce((latest,m)=>Math.max(latest,messageTime(m)),0);}
 function allMessages(){return(snapshot?.threads||[]).flatMap(t=>threadMessages(t).map((m,i)=>({...m,tid:t.threadId,thread:channelTitle(t),index:i}))).sort((a,b)=>messageTime(a)-messageTime(b)||a.index-b.index);}
@@ -160,13 +169,14 @@ function renderCollaborationStatus(){
  if(!active)return;
  bar.append(node('span','',`협업 중 · ${collaborationLabels[active.stage]} · V${active.version} · 미해결 쟁점 ${active.issues.filter(i=>i.status!=='resolved').length}개`));
  const stop=node('button','','협업 중지');stop.onclick=async()=>{try{await api('/api/collaboration/cancel',{id:active.id});await pollOnce();}catch(e){notify(e.message);}};bar.append(stop);
+ if(active.requirements?.length){const d=node('details','run-metrics');d.append(node('summary','',`고정된 조건 · ${active.requirements.filter(x=>!x.superseded_by).length}개`));for(const x of active.requirements.filter(x=>!x.superseded_by))d.append(node('p','',`${x.id} · ${x.kind==='question'?'동료 질문':'사용자 조건'} — ${x.text}`));bar.append(d);}
 }
 function render(){
  if(!snapshot)return;loadReadMarks();
  $('connection').textContent=snapshot.connected?(snapshot.config?.mode==='demo'?'● DEMO':'● LIVE'):'연결 대기';$('connection').classList.toggle('off',!snapshot.connected);
  $('updated').textContent=snapshot.updated?'마지막 수신 '+when(snapshot.updated):'연결 대기 중';
  $('automatic').disabled=snapshot.config?.mode!=='coral';$('automatic').textContent=snapshot.config?.automatic?'허브 자동 응답 켜짐':'관찰 모드';
- const key=JSON.stringify([snapshot.threads,snapshot.jobs,snapshot.collaboration,snapshot.active,snapshot.connected,snapshot.config?.automatic,serverOffline,selected,agent,tab,$('search').value,$('show-closed').checked]);if(key===lastKey)return;lastKey=key;
+ const key=JSON.stringify([snapshot.threads,snapshot.jobs,snapshot.collaboration,snapshot.polls,snapshot.pipelines,snapshot.active,snapshot.connected,snapshot.config?.automatic,serverOffline,selected,agent,tab,$('search').value,$('show-closed').checked]);if(key===lastKey)return;lastKey=key;
  const threads=snapshot.threads||[],all=allMessages();if(selected&&!threads.some(t=>t.threadId===selected))selected='';
  const nav=$('threads'),overview=$('overview');nav.replaceChildren();overview.replaceChildren();function channel(id,title,meta){const b=node('button',selected===id?'active':'');b.append(node('strong','',title),node('small','',meta));b.dataset.channel=id;const t=threads.find(t=>t.threadId===id),unread=t?threadMessages(t).length-readCount(t):0;if(unread){const badge=node('span','unread',String(unread));badge.setAttribute('aria-label',`읽지 않은 메시지 ${unread}개`);b.append(badge);}b.onclick=()=>{selected=id;openingChannel=true;lastKey='';render();};b.setAttribute('aria-current',selected===id?'page':'false');(id?nav:overview).append(b);}
  channel('','전체 대화',`${threads.length}개 채널 · ${all.length}개 메시지`);
@@ -179,15 +189,21 @@ function render(){
  const feed=$('feed');feed.hidden=tab!=='chat';feed.replaceChildren();
  const currentThread=threads.find(t=>t.threadId===selected),boundary=currentThread?readCount(currentThread):0;let divider=null;
  if(!messages.length)feed.append(node('div','empty','표시할 대화가 없습니다. 새 채널을 만들거나 검색 조건을 바꿔 보세요.'));
- for(const m of (selected?messages:messages.slice(-600))){const card=node('article','message'),head=node('div','message-head'),name=m.sendingAgentName||'unknown';
+ for(const m of (selected?messages:messages.slice(-600))){if(m.pipeline){const pc=renderPipelineCard(m.pipeline,m.pipelineResult);if(!selected)pc.append(node('small','thread-tag',m.thread));feed.append(pc);continue;}if(m.poll){const pc=renderPollCard(m.poll,m.pollResult);if(!selected)pc.append(node('small','thread-tag',m.thread));feed.append(pc);continue;}const card=node('article','message'),head=node('div','message-head'),name=m.sendingAgentName||'unknown';
   if(selected&&!agent&&!q&&m.index===boundary){divider=node('div','unread-divider','여기부터 읽지 않은 메시지');feed.append(divider);}
   head.append(node('span','sender',name.toUpperCase()));head.append(node('time','',when(m.messageTimestamp)));
   if(m.mentionAgentNames?.length){const recipients=node('div','mention-recipients');recipients.setAttribute('aria-label','멘션 대상');recipients.append(node('span','mention-caption','받는 사람 →'));for(const target of [...new Set(m.mentionAgentNames)]){const chip=node('span','mention-chip','@'+String(target).toUpperCase());chip.dataset.agent=String(target).toLowerCase();recipients.append(chip);}head.append(recipients);}
+  if(m.vote){const target=node('span','review-target',`검토 대상 → ${voteTarget(m.vote)}`);target.title='이 검토가 대상으로 삼은 후보안의 작성자와 버전';head.append(target);}
+  if(m.pipelinePhase)head.append(node('span','chat-phase',m.pipelinePhase));
   if(m.phase)head.append(node('span',m.final?'chat-phase final-phase':'chat-phase',m.final?(m.phase==='agreed'?'전원 승인 · 자동 제출':collaborationLabels[m.phase]):(collaborationLabels[m.phase]||{question:'질문',issue:'쟁점',notice:'정보 공유'}[m.phase]||'토론')));
   const sender=name.toLowerCase(),identity=['claude','codex','cursor','ops','hub'].includes(sender)?sender:'other';
   card.dataset.sender=identity;card.dataset.messageKey=messageKey(m);
   const avatar=node('div','chat-avatar',{claude:'CL',codex:'CX',cursor:'CU',ops:'OP',hub:'나',other:'?'}[identity]);avatar.setAttribute('aria-hidden','true');
   const body=node('div','bubble-body');body.append(head,messageBody(m));
+  if(m.vote?.requirement_checks?.length){const d=node('details','run-metrics');d.append(node('summary','',`조건 검토 근거 · ${m.vote.requirement_checks.length}개`));for(const x of m.vote.requirement_checks)d.append(node('p','',`${x.id} · ${{met:'충족',unmet:'미충족',unclear:'불명확'}[x.status]||x.status} — ${x.evidence}`));body.append(d);}
+  if(m.requirements?.length){const d=node('details','run-metrics');d.append(node('summary','',`조건 원문 · ${m.requirements.filter(x=>!x.superseded_by).length}개 검토 항목`));for(const x of m.requirements)d.append(node('p','',`${x.id} · ${x.source.toUpperCase()} · ${x.kind==='question'?'동료 질문':'사용자 조건'}${x.superseded_by?' · '+x.superseded_by+'로 교체':''} — ${x.text}`));body.append(d);}
+  if(m.metrics)body.append(renderMetrics(m.metrics));
+  if(m.final&&m.phase==='agreed'){const next=node('button','poll-room-link','이 합의안으로 작업 준비 →');next.onclick=()=>{selected=m.tid||selected;openPipeline(m.messageText);};body.append(next);}
   if(m.issues?.length){const details=node('details','bubble-issues');details.append(node('summary','',`쟁점 ${m.issues.length}개`));for(const i of m.issues){details.append(node('p','',`${i.owner.toUpperCase()} · ${{open:'미해결',investigated:'조사 완료',resolved:'해결'}[i.status]} · ${i.question}`));if(i.resolution)details.append(renderMarkdown(node('div'),i.resolution));}body.append(details);}
   if(!selected)body.append(node('small','thread-tag',m.thread));card.append(avatar,body);feed.append(card);}
  if(position)restoreFeedPosition(position);else feed.scrollTop=divider?divider.offsetTop-feed.offsetTop:feed.scrollHeight;openingChannel=false;renderedView=view;
@@ -201,14 +217,18 @@ function render(){
  $('subtitle').textContent=closed?'닫힌 채널 · 읽기 전용'+(current.summary?' · '+current.summary:''):'';
  $('send').disabled=!selected||closed||busy;$('message').disabled=!selected||closed;
  document.querySelectorAll('[data-mention]').forEach(e=>e.disabled=closed);renderParticipants();
- $('job-count').textContent=snapshot.jobs.length;const jobs=$('jobs');jobs.replaceChildren();
- if(!snapshot.jobs.length)jobs.append(node('div','empty','아직 자동 작업이 없습니다. Coral 연결 후 자동 응답을 켜고 에이전트를 멘션하세요.'));
- for(const job of snapshot.jobs){const card=node('article','job'),head=node('div','job-head');head.append(node('strong','',job.agent.toUpperCase()),node('span','badge',job.status),node('small','',job.id));card.append(head);if(job.error)card.append(node('p','error',job.error));
-  const actions=node('div','job-actions');function action(label,endpoint){const b=node('button','',label);b.onclick=async()=>{b.disabled=true;try{await api(endpoint,{id:job.id});await pollOnce();}catch(e){notify(e.message);}finally{b.disabled=false;}};actions.append(b);}
-  if(['running','pending'].includes(job.status))action('취소','/api/cancel');if(!job.id.startsWith('collab-')&&snapshot.config?.automatic&&['failed','cancelled'].includes(job.status)&&!threads.some(t=>t.threadId===job.tid&&t.state==='closed'))action('재시도','/api/retry');
-  const view=node('button','','결과 보기');view.onclick=async()=>{try{const r=await api('/api/result?id='+encodeURIComponent(job.id));renderMarkdown($('result-text'),r?.reply||'아직 결과가 없습니다.');$('result-dialog').showModal();}catch(e){notify(e.message);}};actions.append(view);card.append(actions);jobs.append(card);}
+ const activePipeline=(snapshot.pipelines||[]).find(p=>p.tid===selected&&p.status==='active');
+ $('new-pipeline').disabled=!current||closed||!!activePipeline||snapshot.config?.mode==='demo'||snapshot.collaboration?.some(r=>r.tid===selected&&r.status==='active')||(snapshot.polls||[]).some(p=>p.tid===selected&&p.status==='active');
+ $('new-pipeline').title=snapshot.config?.mode==='demo'?'Coral 연결 후 실제 역할 작업을 실행할 수 있습니다.':'계획·구현·검증 담당자를 지정합니다.';
+ const activePoll=(snapshot.polls||[]).find(p=>p.tid===selected&&p.status==='active');
+ $('new-poll').disabled=!current||closed||!!activePipeline||!!activePoll||snapshot.collaboration?.some(r=>r.tid===selected&&r.status==='active');
+ $('new-poll').title=activePoll?'진행 중인 투표가 끝난 뒤 시작할 수 있습니다.':'같은 지문에 대한 독립 판단을 비교합니다.';
+ if(activePoll){$('participant-hint').textContent='비밀 투표 진행 중 · 새 메시지는 대화에만 남고 투표 조건이나 판단에는 전달되지 않습니다.';}
+ if(activePipeline)$('participant-hint').textContent='역할 작업 진행 중 · 새 메시지는 대화 기록으로 남습니다. 작업 조건 변경은 중지 후 새 작업에서 요청하세요.';
+ renderPipelinePage();
+ document.body.classList.toggle('workflow-mode',tab==='jobs');
 }
-async function pollOnce(){snapshot=await api('/api/state');snapshot.jobs=[...(snapshot.collaboration_jobs||[]),...snapshot.jobs];serverOffline=false;render();markVisibleRead();if(snapshot.error)notify(snapshot.error);else notify(snapshot.config?.mode==='demo'?'데모 데이터입니다. 실제 모델 호출 없이 화면을 체험할 수 있습니다.':'');}
+async function pollOnce(){snapshot=await api('/api/state');snapshot.jobs=[...(snapshot.pipelines||[]).flatMap(p=>p.tasks.map(t=>({...t,tid:p.tid,stage:t.phase,pipeline_id:p.id}))),...(snapshot.collaboration_jobs||[]),...snapshot.jobs];serverOffline=false;render();markVisibleRead();if(snapshot.error)notify(snapshot.error);else notify(snapshot.config?.mode==='demo'?'데모 데이터입니다. 실제 모델 호출 없이 화면을 체험할 수 있습니다.':'');}
 async function poll(){try{await pollOnce();}catch(e){serverOffline=true;lastKey='';render();$('connection').textContent='서버 연결 끊김';$('connection').classList.add('off');notify(e.message);}setTimeout(poll,3000);}
 let composingMessage=false,compositionEndedAt=-Infinity;
 $('message').addEventListener('compositionstart',()=>{composingMessage=true;});
@@ -262,3 +282,22 @@ $('automatic').onclick=async()=>{if(!snapshot.config.automatic&&!confirm('허브
 $('tab-office').onclick=()=>{tab='office';render();};
 $('tab-chat').onclick=()=>{tab='chat';render();};$('tab-jobs').onclick=()=>{tab='jobs';render();};$('search').oninput=()=>render();$('close-result').onclick=()=>$('result-dialog').close();
 (async()=>{try{boot=await api('/api/bootstrap');csrf=boot.csrf;await pollOnce();if(!boot.config)setup();poll();}catch(e){notify('시작 실패: '+e.message);}})();
+
+function metricDuration(seconds){const n=Math.max(0,Math.round(seconds||0));return `${Math.floor(n/60)}분 ${n%60}초`;}
+function renderMetrics(m){
+ const box=node('details','run-metrics');
+ box.append(node('summary','',`실행 기록 · ${metricDuration(m.elapsed_seconds)} · CLI ${m.calls}회`));
+ box.append(node('p','',`질문 ${m.bundled_questions}건 묶음 전달 · 0-turn 수신 확인 ${m.boundary_received}건 / 제시 ${m.boundary_offered}건 · 별도 질문 호출 ${m.boundary_cancelled_calls}건 취소`));
+ for(const a of m.agents){
+  const line=node('p','');line.append(node('strong',a.agent,a.agent.toUpperCase()),document.createTextNode(` · ${metricDuration(a.seconds)} · CLI ${a.calls}회${a.legacy_calls?' (이전 기록 기반)':''}`));
+  const u=a.usage;let text='토큰: 확인 불가';
+  if(u){text=`CLI 보고 토큰: 입력 ${u.input_tokens.toLocaleString()} · 출력 ${u.output_tokens.toLocaleString()} (${a.usage_calls}/${a.calls}회 확인)`;for(const [k,label] of [['cache_read_input_tokens','캐시 읽기'],['cache_creation_input_tokens','캐시 생성'],['cached_input_tokens','입력 중 캐시']])if(k in u)text+=` · ${label} ${u[k].toLocaleString()}`;}
+  line.append(node('small','',text));box.append(line);
+ }
+ box.append(node('small','','전체 시간은 요청부터 종료까지, 에이전트 시간은 실행 시간의 합입니다. 병렬 실행으로 두 값은 다릅니다. 이전 기록은 재시도 시간이 누락될 수 있습니다. 토큰은 CLI 보고값이며 비용·절감률 추정이 아닙니다.'));
+ return box;
+}
+
+initVoting();
+
+initPipeline();

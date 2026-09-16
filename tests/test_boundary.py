@@ -66,7 +66,7 @@ class BoundaryTests(unittest.TestCase):
   self.hub.config.value={**self.cfg,'zero_turn_agents':['claude']}
   self.assertEqual(self.hub.config.prepare(self.cfg|{'zero_turn_agents':['claude']})['zero_turn_agents'],['claude'])
   body=dict(self.cfg);body.pop('zero_turn_agents');self.assertEqual(self.hub.config.prepare(body)['zero_turn_agents'],['claude'])
-  with self.assertRaises(ValueError):self.hub.config.prepare(self.cfg|{'zero_turn_agents':['codex']})
+  with self.assertRaises(ValueError):self.hub.config.prepare(self.cfg|{'zero_turn_agents':['cursor']})
 
  def test_hook_settings_are_local_and_opt_in(self):
   self.assertEqual(prepare({}, {'collaboration':{}},self.hub.root),[])

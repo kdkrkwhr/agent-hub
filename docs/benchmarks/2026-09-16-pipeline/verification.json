@@ -1,0 +1,24 @@
+{
+  "status": "completed",
+  "reason": "지정된 검증 담당자 전원이 동일한 파일을 확인했고 검증 명령이 통과했습니다. 원본에 자동 반영하지 않았습니다.",
+  "elapsed_seconds": 158.2,
+  "roles": {
+    "plan": [
+      "claude"
+    ],
+    "implement": [
+      "codex"
+    ],
+    "verify": [
+      "cursor"
+    ]
+  },
+  "iteration": 1,
+  "native_calls": 3,
+  "check_exit_code": 0,
+  "original_unchanged": true,
+  "changed_files": [
+    "maths.py"
+  ],
+  "coral_posts": 0
+}

@@ -28,3 +28,16 @@ test('overview follows running work even if a newer request is queued elsewhere'
 test('idle, queued and completed work are distinct',()=>{
  const {view,round}=fixture();view.snapshot.jobs=[{agent:'codex',round_id:'r',tid:'channel',status:'pending'}];assert.equal(view.stateFor('codex').label,'실행 대기');view.snapshot.jobs=[];round.status='agreed';assert.equal(view.stateFor('codex').zone,'lounge');assert.equal(view.stateFor('codex').label,'협업 완료');
 });
+
+test('voting room preserves secrecy and separates option zones from abstention',()=>{
+ const {view}=fixture();view.room='vote';view.poll={status:'active',options:[{id:'A'},{id:'B'}],ballots:[{agent:'claude',status:'done'},{agent:'codex',status:'running'}]};
+ assert.equal(view.stateFor('claude').zone,'work');assert.equal(view.stateFor('claude').label,'제출 · 비공개');assert.equal(view.stateFor('cursor').label,'미참여');
+ view.poll.status='revealed';view.poll.ballots[0].choice='B';view.poll.ballots[1].choice='ABSTAIN';assert.equal(view.stateFor('claude').zone,'vote-1');assert.equal(view.stateFor('codex').zone,'vote-other');
+ view.room='work';assert.notEqual(view.stateFor('claude').zone,'vote-1');
+});
+
+test('role workflow uses real task phases and preserves discussion fallback',()=>{
+ const {view}=fixture();view.snapshot.pipelines=[{id:'p',tid:'channel',created:10,status:'active',roles:{plan:['claude'],implement:['codex'],verify:['cursor']},tasks:[{agent:'codex',phase:'implement',status:'running'}],events:[]}];
+ assert.equal(view.stateFor('codex').label,'구현 중');assert.equal(view.stateFor('codex').zone,'work');view.snapshot.pipelines[0].tasks=[{agent:'cursor',phase:'verify',status:'running'}];assert.equal(view.stateFor('cursor').zone,'review');
+ view.snapshot.pipelines=[];assert.equal(view.stateFor('codex').label,'동료 대기');
+});

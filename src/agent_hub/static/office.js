@@ -1,8 +1,8 @@
 /* Original SVG office scene. No game engine, remote assets, or model calls. */
 'use strict';
 window.AgentOffice=class AgentOffice {
- constructor(root,openChat){
-  this.root=root;this.openChat=openChat;this.actors=new Map();this.chosen='';this.layoutKey='';this.visible=false;this.raf=0;
+ constructor(root,openChat,requestWork){
+  this.root=root;this.openChat=openChat;this.requestWork=requestWork;this.actors=new Map();this.chosen='';this.layoutKey='';this.visible=false;this.raf=0;
   this.reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls;if(text)n.textContent=text;return n;};this.el=el;
   const heading=el('div','office-heading');const title=el('div','');title.append(el('small','office-eyebrow','YOUR TEAM, IN PLACE'),el('h2','','에이전트 스튜디오'));
@@ -14,6 +14,9 @@ window.AgentOffice=class AgentOffice {
   this.roster=el('div','office-roster');this.roster.setAttribute('aria-label','사무실 에이전트');
   const foot=el('p','office-footnote','실제 작업 상태를 공간으로 표현합니다. 위치는 시각화이며 캐릭터를 눌러 공유 내용을 확인할 수 있습니다.');
   root.append(heading,this.caption,body,this.roster,foot);
+  this.room='work';this.pollId='';this.rooms=el('div','office-rooms');this.workRoom=el('button','','업무 사무실');this.voteRoom=el('button','','투표실');this.pollSelect=el('select','');this.pollSelect.setAttribute('aria-label','투표실에서 볼 투표');
+  for(const [button,room] of [[this.workRoom,'work'],[this.voteRoom,'vote']]){button.type='button';button.onclick=()=>{this.room=room;this.update(this.snapshot,this.selected,this.offline,this.visible);};}
+  this.pollSelect.onchange=()=>{this.pollId=this.pollSelect.value;this.update(this.snapshot,this.selected,this.offline,this.visible);};this.rooms.append(this.workRoom,this.voteRoom,this.pollSelect);root.prepend(this.rooms);
   document.addEventListener('visibilitychange',()=>{this.root.classList.toggle('office-paused',document.hidden||!this.visible);if(document.hidden)this.stop();else if(this.visible)this.animate();});
  }
  s(tag,attrs={},text){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);if(text!==undefined)e.textContent=text;return e;}
@@ -84,7 +87,42 @@ window.AgentOffice=class AgentOffice {
   const pick=()=>{this.chosen=name;this.details();this.selectActor();};g.addEventListener('click',pick);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});this.actorLayer.append(g);
   this.actors.set(name,{name,i,color,g,status,position:null,path:[],state:null});
  }
+ ballotState(name){
+  const p=this.poll,base={poll:p,round:null,job:null,zone:'lounge',label:'미참여',description:'이 투표에 참여하지 않은 에이전트입니다.'};
+  if(!p)return {...base,label:'투표 없음',description:'대화의 독립 비밀 투표 버튼으로 시작해 주세요.'};
+  const b=p.ballots.find(b=>b.agent===name);if(!b)return base;
+  if(p.status==='cancelled')return {...base,label:'투표 취소',description:'취소된 투표의 선택과 근거는 공개하지 않습니다.'};
+  if(p.status==='active')return {...base,zone:'work',label:this.offline?'상태 미확인':({done:'제출 · 비공개',running:'판단 중',pending:'실행 대기',failed:'실패'}[b.status]||'대기'),description:'서로의 답을 보지 않고 판단합니다. 마감 후 선택과 근거를 함께 공개합니다.',unknown:this.offline,job:!this.offline&&b.status==='running'?b:null};
+  const index=p.options.findIndex(o=>o.id===b.choice);
+  return {...base,zone:index<0?'vote-other':'vote-'+index,label:b.choice==='ABSTAIN'?'기권':index>=0?b.choice+'안 선택':b.status==='failed'?'실패':'미응답',description:b.reply||b.error||'마감까지 표를 제출하지 않았습니다.',ballot:b};
+ }
+ buildVote(names){
+  this.svg.replaceChildren();this.actors.clear();this.corridor=245;this.svg.setAttribute('viewBox','-55 0 1190 750');
+  const floor=this.s('g');this.svg.append(floor);this.box(floor,0,0,620,570,18,'#273c4c','#101d2c','#1a2d3c',-18);
+  this.box(floor,0,0,620,7,80,'#587789','#2b4558','#3b596b');this.box(floor,0,7,7,563,80,'#4d7181','#293f51','#355464');
+  this.text(floor,225,9,36,'INDEPENDENT BALLOT','#a5dfed',19);
+  for(let x=25;x<620;x+=50)this.poly(floor,[[x,9,0],[x+1,9,0],[x+1,570,0],[x,570,0]],'#324958');
+  for(let y=30;y<570;y+=50)this.poly(floor,[[8,y,0],[620,y,0],[620,y+1,0],[8,y+1,0]],'#324958');
+  const options=this.poll?.options||[{id:'A'},{id:'B'}];
+  this.voteLabels=[];options.forEach((o,i)=>{const x=36+(i%2)*290,y=280+Math.floor(i/2)*130,color=['#375f69','#564b70','#5b5840','#405e58'][i];this.box(floor,x,y,255,115,2,color,color,color);this.text(floor,x+12,y+15,4,o.id+' / 선택 구역','#e0edf5',15);const [px,py]=this.point(x+155,y+15,4);const label=this.s('text',{x:px,y:py,fill:'#e0edf5','font-size':12});floor.append(label);this.voteLabels.push(label);});
+  names.forEach((name,i)=>{const x=60+i*175;this.desk(floor,x,60);this.box(floor,x-8,52,4,115,43,'#607b8c','#334f63','#446277');this.text(floor,x+3,197,2,'PRIVATE','#97c8d9',10);});
+  this.text(floor,42,556,3,'기권 · 미응답 · 미참여','#b0c9d9',11);this.plant(floor,590,60);
+  this.actorLayer=this.s('g');this.svg.append(this.actorLayer);names.forEach((name,i)=>this.createActor(name,i));
+ }
+ pipelineState(name){
+  const s=this.snapshot,p=(s.pipelines||[]).find(p=>(!this.selected||p.tid===this.selected)&&p.status==='active')||(s.pipelines||[]).find(p=>p.tid===this.selected);
+  if(!p)return null;const newer=(s.collaboration||[]).some(r=>r.tid===p.tid&&r.created>p.created);if(newer&&p.status!=='active')return null;
+  const base={pipeline:p,round:null,job:null,zone:'lounge',label:'역할 작업 대기',description:'지정된 순서로 다음 단계를 기다립니다.'};
+  if(this.offline)return {...base,label:'상태 미확인',unknown:true};
+  if(!Object.values(p.roles).flat().includes(name))return {...base,label:'미참여',description:'이번 역할 작업의 담당자가 아닙니다.'};
+  const task=p.tasks.find(t=>t.agent===name&&t.status==='running');
+  if(task)return {...base,job:task,zone:task.phase==='verify'?'review':['plan','consult'].includes(task.phase)?'meeting':'work',label:({prepare:'작업 준비',plan:'계획 중',implement:'구현 중',verify:'검증 중',inspect:'읽기 전용 질의 중',consult:'질문 답변 중'})[task.phase],description:'분리된 작업 사본에서 담당 단계를 진행합니다.'};
+  if(p.status!=='active')return {...base,label:{completed:'작업 완료',blocked:'작업 보류',cancelled:'작업 취소'}[p.status],description:p.reason};
+  return base;
+ }
  stateFor(name){
+  if(this.room==='vote')return this.ballotState(name);
+  const pipelineState=this.pipelineState(name);if(pipelineState)return pipelineState;
   const s=this.snapshot,rounds=(s.collaboration||[]).filter(r=>!this.selected||r.tid===this.selected),running=(s.jobs||[]).find(j=>j.agent===name&&j.status==='running'&&(!this.selected||j.tid===this.selected)),r=this.selected?rounds[0]:rounds.find(r=>r.id===running?.round_id)||rounds.find(r=>r.status==='active'&&r.team.includes(name))||rounds.find(r=>r.team.includes(name));
   const jobs=(s.jobs||[]).filter(j=>j.agent===name&&(!this.selected||j.tid===this.selected)&&(!r||j.round_id===r.id));
   const base={round:r,job:null,zone:'lounge',label:'대기',description:'현재 실행 중인 작업이 없습니다.'};
@@ -103,6 +141,11 @@ window.AgentOffice=class AgentOffice {
   return base;
  }
  target(actor,zone){const i=actor.i;
+  if(this.room==='vote'){
+   if(zone==='work')return {x:102+i*175,y:164};
+   if(zone.startsWith('vote-')&&zone!=='vote-other'){const n=Number(zone.slice(5));const peers=[...this.actors.values()].filter(a=>this.ballotState(a.name).zone===zone),slot=peers.findIndex(a=>a.name===actor.name);return {x:72+(n%2)*290+slot*72,y:350+Math.floor(n/2)*130};}
+   return {x:165+i*95,y:560};
+  }
   if(zone==='work')return {x:90+(i%2)*133,y:160+Math.floor(i/2)*115};
   if(zone==='review')return {x:415+(i%3)*56,y:199+Math.floor(i/3)*46};
   if(zone==='meeting')return {x:420+(i%3)*54,y:this.corridor+152+Math.floor(i/3)*35};
@@ -111,12 +154,22 @@ window.AgentOffice=class AgentOffice {
  update(snapshot,selected,offline,visible){
   this.snapshot=snapshot;this.selected=selected;this.offline=offline;this.visible=visible;this.root.classList.toggle('office-paused',!visible||document.hidden);
   if(!visible){this.stop();return;}
-  const names=[...new Set(snapshot.config?.agents||[])],key=JSON.stringify(names);
-  if(key!==this.layoutKey){this.build(names);this.layoutKey=key;}
+  const polls=(snapshot.polls||[]).filter(p=>!selected||p.tid===selected);this.poll=polls.find(p=>p.id===this.pollId)||polls[0];this.pollId=this.poll?.id||'';
+  if(document.activeElement!==this.pollSelect){this.pollSelect.replaceChildren();for(const p of polls){const option=this.el('option','',p.passage.slice(0,45)+(p.status==='active'?' · 진행 중':' · 종료'));option.value=p.id;option.selected=p.id===this.pollId;this.pollSelect.append(option);}}this.pollSelect.hidden=this.room!=='vote'||!polls.length;
+  this.workRoom.setAttribute('aria-pressed',String(this.room==='work'));this.voteRoom.setAttribute('aria-pressed',String(this.room==='vote'));
+  const names=[...new Set(snapshot.config?.agents||[])],key=JSON.stringify([names,this.room,this.room==='vote'?this.poll?.id:null]);
+  if(key!==this.layoutKey){if(this.room==='vote')this.buildVote(names);else this.build(names);this.layoutKey=key;}
   if(!names.includes(this.chosen))this.chosen=names[0]||'';
   this.connection.textContent=offline||!snapshot.connected?'● 연결 확인 필요':snapshot.config?.mode==='demo'?'○ DEMO':'● LIVE';
   this.connection.dataset.live=String(!offline&&!!snapshot.connected);
   const t=(snapshot.threads||[]).find(t=>t.threadId===selected);this.caption.textContent=(t?'현재 채널 · '+t.threadName:'전체 채널의 활동')+' / '+names.length+'명의 에이전트';
+  this.root.classList.toggle('voting-room',this.room==='vote');this.root.querySelector('.office-heading h2').textContent=this.room==='vote'?'독립 투표실':'에이전트 스튜디오';
+  this.root.querySelector('.office-legend').hidden=this.room==='vote';
+  this.root.querySelector('.office-footnote').textContent=this.room==='vote'?'공개 전에는 선택이 숨겨집니다. 공개 후 캐릭터를 선택하면 주장과 근거를 볼 수 있습니다.':'실제 작업 상태를 공간으로 표현합니다. 위치는 시각화이며 캐릭터를 눌러 공유 내용을 확인할 수 있습니다.';
+  if(this.room==='vote'){
+   this.caption.textContent=this.poll?(this.poll.demo?'데모 · ':'')+(this.poll.status==='active'?'비밀 투표 · 선택은 공개 전까지 숨겨집니다.':this.poll.status==='revealed'?'투표 공개 · 선택 구역의 캐릭터를 눌러 근거를 확인하세요.':'취소 · 선택 비공개'):'투표실 · 대화에서 비밀 투표를 시작해 주세요.';
+   this.voteLabels.forEach((label,i)=>{label.textContent=this.poll?.status==='revealed'?(this.poll.counts[this.poll.options[i].id]+'표'):'비공개';});
+  }
   for(const actor of this.actors.values()){
    const state=this.stateFor(actor.name),old=actor.state;actor.state=state;actor.status.textContent=state.label;actor.g.setAttribute('aria-label',actor.name.toUpperCase()+' · '+state.label);actor.g.classList.toggle('unknown',!!state.unknown);actor.g.classList.toggle('working',!!state.job&&!state.unknown);actor.g.dataset.activity=state.job?state.zone:'idle';
    const target=this.target(actor,state.zone);
@@ -136,7 +189,18 @@ window.AgentOffice=class AgentOffice {
   this.panel.replaceChildren();const actor=this.actors.get(this.chosen);if(!actor){this.panel.append(this.el('p','','등록된 에이전트가 없습니다.'));return;}
   const state=actor.state;this.panel.style.setProperty('--person',actor.color);
   this.panel.append(this.el('small','office-eyebrow','AGENT FOCUS'),this.el('h3','',actor.name.toUpperCase()),this.el('span','office-state',state.label),this.el('p','office-description',state.description));
+  if(this.requestWork&&this.room!=='vote'){const tid=this.selected||state.pipeline?.tid||state.round?.tid;const work=this.el('button','office-open-chat','이 에이전트에게 작업 요청');work.type='button';work.disabled=!tid||this.offline||this.snapshot.config.mode==='demo';work.onclick=()=>this.requestWork(tid,actor.name);this.panel.append(work);}
   if(state.job?.started){const elapsed=this.el('p','office-elapsed');elapsed.dataset.start=state.job.started;this.panel.append(elapsed);this.elapsed();}
+  if(state.pipeline){
+   const p=state.pipeline;this.panel.append(this.el('p','office-excerpt','역할: '+(p.mode==='inspect'?'읽기 전용 질의':p.mode==='single'?'구현 · 자체 검토':Object.entries(p.roles).filter(([k,v])=>v.includes(actor.name)).map(([k])=>({plan:'계획',implement:'구현',verify:'검증'})[k]).join(' · '))));
+   const event=[...p.events].reverse().find(e=>e.sender===actor.name);this.panel.append(this.el('p','office-excerpt',event?.content||'아직 공유된 작업 결과가 없습니다.'));const button=this.el('button','office-open-chat','대화에서 작업 보기 →');button.onclick=()=>this.openChat(p.tid,'');this.panel.append(button);return;
+  }
+  if(this.room==='vote'){
+   if(this.poll){for(const o of this.poll.options){const line=this.el('p','office-poll-option');line.append(this.el('strong','',o.id),document.createTextNode(o.text));this.panel.append(line);}}
+   if(state.ballot?.reason){this.panel.append(this.el('h4','','판단 근거'),this.el('p','',state.ballot.reason),this.el('h4','','우려 · 불확실성'),this.el('p','',state.ballot.concern));}
+   else this.panel.append(this.el('p','office-ballot-help',this.poll?.status==='active'?'중간 선택·근거는 모두에게 비공개입니다.':'득표수는 정답이나 실행 승인이 아닙니다.'));
+   const button=this.el('button','office-open-chat','대화에서 전체 투표 보기 →');button.type='button';button.onclick=()=>this.openChat(this.poll?.tid||this.selected,'');button.disabled=!this.poll;this.panel.append(button);return;
+  }
   this.panel.append(this.el('div','office-rule'),this.el('small','office-eyebrow','최근 공유 내용'));
   const events=state.round?.events||[],event=[...events].reverse().find(e=>e.sender===actor.name);
   const text=event?.content||'이 요청에서 아직 공유한 내용이 없습니다.';this.panel.append(this.el('p','office-excerpt',text.length>440?text.slice(0,440)+'…':text));

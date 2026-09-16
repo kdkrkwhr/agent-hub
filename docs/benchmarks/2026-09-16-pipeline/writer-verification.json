@@ -1,0 +1,17 @@
+{
+  "note": "Initial Cursor sandbox-enabled invocation is unsupported on Windows. Retest used existing native permissions without force or sandbox bypass flags.",
+  "writers": [
+    {
+      "agent": "claude",
+      "success": true,
+      "status": "done",
+      "seconds": 23.0
+    },
+    {
+      "agent": "cursor",
+      "success": true,
+      "status": "done",
+      "seconds": 77.3
+    }
+  ]
+}

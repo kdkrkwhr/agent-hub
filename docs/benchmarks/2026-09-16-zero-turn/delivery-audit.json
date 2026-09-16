@@ -1,0 +1,145 @@
+[
+  {
+    "run": "arithmetic-r1-off",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "consult": 1,
+      "explore": 2,
+      "resolve": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "arithmetic-r1-on",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "code-r1-off",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "resolve": 1,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "code-r1-on",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "revision-r1-off",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "consult": 1,
+      "explore": 2,
+      "resolve": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "revision-r1-on",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "arithmetic-r2-on",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "arithmetic-r2-off",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "consult": 1,
+      "explore": 2,
+      "resolve": 1,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "code-r2-on",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "code-r2-off",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "consult": 1,
+      "explore": 2,
+      "resolve": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "revision-r2-on",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "explore": 2,
+      "review": 4,
+      "synthesize": 1
+    }
+  },
+  {
+    "run": "revision-r2-off",
+    "injected": 2,
+    "delivered_to_completed_task": 2,
+    "duplicate_same_task_deliveries": 0,
+    "stages": {
+      "consult": 1,
+      "explore": 2,
+      "resolve": 1,
+      "review": 6,
+      "synthesize": 2
+    }
+  }
+]

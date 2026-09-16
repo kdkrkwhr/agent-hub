@@ -1,0 +1,28 @@
+{
+  "status": "revealed",
+  "elapsed_seconds": 59.5,
+  "sealed_checks": 232,
+  "counts": {
+    "A": 3,
+    "B": 0
+  },
+  "agents": [
+    {
+      "agent": "claude",
+      "status": "done",
+      "choice": "A"
+    },
+    {
+      "agent": "codex",
+      "status": "done",
+      "choice": "A"
+    },
+    {
+      "agent": "cursor",
+      "status": "done",
+      "choice": "A"
+    }
+  ],
+  "calls": 3,
+  "coral_posts": 0
+}

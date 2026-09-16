@@ -23,7 +23,7 @@ class CollaborationTests(unittest.TestCase):
   ctx=self.c.task_context(task)
   self.hub.db.execute("UPDATE collab_tasks SET status='running',input=?,started=? WHERE id=?",(json.dumps(ctx),time.time(),task['id']))
   self.hub.db.execute('UPDATE collab_inbox SET consumed_by=? WHERE round_id=? AND agent=? AND consumed_by IS NULL',(task['id'],task['round_id'],task['agent']))
-  result={'reply':'Concrete evidence and solution','round':task['round_id'],'task':task['id'],'version':task['version'],'decision':decision,'proposal_hash':self.c.get(task['round_id'])['digest'],'assignments':{a:a+' independent task' for a in ctx['team']},**extra}
+  result={'reply':'Concrete evidence and solution','round':task['round_id'],'task':task['id'],'version':task['version'],'decision':decision,'proposal_hash':self.c.get(task['round_id'])['digest'],'assignments':{a:a+' independent task' for a in ctx['team']},'requirement_checks':[{'id':x['id'],'status':'met','evidence':'Verified source and proposal'} for x in ctx['requirements'] if not x['superseded_by']],**extra}
   self.c.finish(task,result);self.hub.db.commit()
  def to_review(self,rid):
   for _ in range(20):
@@ -109,7 +109,7 @@ class CollaborationTests(unittest.TestCase):
   rid=self.request()
   def execute(name,cfg,context,incoming,folder,cancel,live):
    c=context['collaboration']
-   return dict(round=c['round'],task=c['task'],version=c['version'],reply='Verified',candidate='Sum 21, product 180' if c['phase']=='explore' else '',decision='APPROVE',proposal_hash=c['proposal_hash'])
+   return dict(round=c['round'],task=c['task'],version=c['version'],reply='Verified',candidate='Sum 21, product 180' if c['phase']=='explore' else '',decision='APPROVE',proposal_hash=c['proposal_hash'],requirement_checks=[{'id':x['id'],'status':'met','evidence':'Verified source and proposal'} for x in c['requirements'] if not x['superseded_by']])
   with patch('agent_hub.adapters.execute',side_effect=execute) as model,patch.object(self.hub,'peer') as peer:
    for _ in range(20):
     self.c.tick(self.cfg,[{'threadId':'t','state':'open','messages':[]}])
@@ -142,7 +142,9 @@ class CollaborationTests(unittest.TestCase):
    self.c.ingest([{'threadId':'t','state':'open','messages':[{'sendingAgentName':'ops','messageText':'No valid mention','mentionAgentNames':mentions,'messageTimestamp':n}]}],self.cfg)
   self.assertEqual(self.hub.db.execute('SELECT count(*) FROM collab_rounds').fetchone()[0],0)
  def test_stale_vote_blocks(self):
-  rid=self.request();self.to_review(rid);self.reply(self.task(),proposal_hash='wrong')
+  rid=self.request();self.to_review(rid);task=self.task();self.reply(task,proposal_hash='wrong')
+  self.assertEqual(self.c.get(rid)['status'],'active')
+  self.reply(self.task(task['agent']),proposal_hash='still wrong')
   self.assertEqual(self.c.get(rid)['status'],'blocked')
  def test_guidance_during_review_requires_new_candidate(self):
   rid=self.request();self.to_review(rid);self.request('Additional constraint',2)
@@ -185,7 +187,7 @@ class CollaborationTests(unittest.TestCase):
   rid=self.request()
   def execute(name,cfg,context,incoming,folder,cancel,live):
    c=context['collaboration']
-   return dict(round=c['round'],task=c['task'],version=c['version'],reply='Verified solution',decision='APPROVE',proposal_hash=c['proposal_hash'],assignments={a:'Inspect '+a for a in c['team']})
+   return dict(round=c['round'],task=c['task'],version=c['version'],reply='Verified solution',decision='APPROVE',proposal_hash=c['proposal_hash'],requirement_checks=[{'id':x['id'],'status':'met','evidence':'Verified source and proposal'} for x in c['requirements'] if not x['superseded_by']],assignments={a:'Inspect '+a for a in c['team']})
   with patch('agent_hub.adapters.execute',side_effect=execute) as model,patch.object(self.hub,'peer') as peer:
    for _ in range(30):
     self.c.tick(self.cfg,[{'threadId':'t','state':'open','messages':[]}])
@@ -265,5 +267,28 @@ class CollaborationTests(unittest.TestCase):
   self.assertEqual(self.hub.db.execute("SELECT COUNT(*) FROM collab_events WHERE kind='question'").fetchone()[0],1)
   pending=self.hub.db.execute("SELECT input FROM collab_tasks WHERE stage='consult'").fetchone()
   self.assertTrue(json.loads(pending['input'])['urgent'])
+
+
+
+ def test_votes_identify_actual_candidate_author_across_revisions(self):
+  rid=self.request();self.reply(self.task('codex'),candidate='Original proposal')
+  self.reply(self.task('claude'));self.reply(self.task('cursor'))
+  self.reply(self.task('claude'));self.reply(self.task('codex'))
+  self.reply(self.task('cursor'),'OBJECT',issues=[{'owner':'claude','question':'Verify constraint'}])
+  self.reply(self.task('claude')) # resolve
+  self.reply(self.task('claude'),reply='Revised proposal') # synthesize
+  for a in self.cfg['agents']:self.reply(self.task(a))
+  rounds,_=self.c.snapshot(self.hub.scope(self.cfg));r=next(r for r in rounds if r['id']==rid)
+  votes=[e['vote'] for e in r['events'] if e['kind']=='review']
+  self.assertEqual([v['proposal_author'] for v in votes if v['version']==1],['codex']*3)
+  self.assertEqual([v['proposal_author'] for v in votes if v['version']==2],['claude']*3)
+  self.assertEqual([v['proposal_author'] for v in r['votes']],['claude']*3)
+
+ def test_missing_proposal_event_does_not_guess_lead_as_author(self):
+  rid=self.request();self.to_review(rid);self.reply(self.task('claude'))
+  self.hub.db.execute("DELETE FROM collab_events WHERE round_id=? AND kind='synthesize'",(rid,))
+  rounds,_=self.c.snapshot(self.hub.scope(self.cfg))
+  review=next(e for e in rounds[0]['events'] if e['kind']=='review')
+  self.assertIsNone(review['vote']['proposal_author'])
 
 if __name__=='__main__':unittest.main()

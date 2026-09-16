@@ -1,0 +1,40 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AGENT HUB · 0-turn 비교 검증</title><style>body{margin:0;background:#0c121c;color:#e5edf7;font:16px/1.75 "Malgun Gothic",sans-serif}main{max-width:1100px;margin:auto;padding:35px 20px}h1{font-size:34px;line-height:1.35}h2{font-size:20px}small,.note{color:#aabccf}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}article,section{border:1px solid #30465a;background:#131f2c;border-radius:14px;padding:22px;margin:18px 0}.big{font-size:32px;color:#80e4c7;font-weight:bold;margin:8px 0}.table{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}th,td{text-align:left;padding:12px 9px;border-bottom:1px solid #30465a}th{color:#8edcff}pre{white-space:pre-wrap;word-break:break-word;font:14px/1.8 "Malgun Gothic",sans-serif}.tag{color:#8edcff;font-size:12px;letter-spacing:.12em}@media(max-width:600px){.grid{grid-template-columns:1fr}h1{font-size:27px}}@media print{body{background:white;color:#152435}article,section{background:white}small,.note{color:#34495f}}</style><main><div class="tag">AGENT HUB · CONTROLLED CLI BENCHMARK · 2026.09.16</div><h1>0-turn은 실제 협업 비용을 줄였을까?</h1><p>동일한 과제와 모델로 OFF/ON을 교대 실행한 소규모 실측입니다.<br>최종 정답·전원 합의와 호출·시간·토큰을 함께 확인합니다.</p><div class="grid"><article><h2>0-turn OFF</h2><p class="big">4/6 성공</p><p>중앙값 171.1초 · 호출 합계 59회</p><p>보고 토큰 합계 2,263,673</p></article><article><h2>0-turn ON</h2><p class="big">6/6 성공</p><p>중앙값 103.2초 · 호출 합계 42회</p><p>보고 토큰 합계 1,552,075</p></article></div><section><h2>라운드별 결과</h2><div class="table"><table><thead><tr><th>과제</th><th>반복</th><th>모드</th><th>종료</th><th>JSON 필수값</th><th>초</th><th>호출</th><th>보고 토큰</th><th>경계 수신</th><th>호출 취소</th></tr></thead><tbody><tr><td>arithmetic</td><td>1</td><td>OFF</td><td>agreed</td><td>통과</td><td>170.5</td><td>10</td><td>337,010</td><td>0</td><td>0</td></tr><tr><td>arithmetic</td><td>1</td><td>ON</td><td>agreed</td><td>통과</td><td>103.3</td><td>7</td><td>255,900</td><td>2</td><td>2</td></tr><tr><td>code</td><td>1</td><td>OFF</td><td>agreed</td><td>통과</td><td>145.1</td><td>8</td><td>291,196</td><td>0</td><td>0</td></tr><tr><td>code</td><td>1</td><td>ON</td><td>agreed</td><td>통과</td><td>108.4</td><td>7</td><td>285,971</td><td>2</td><td>2</td></tr><tr><td>revision</td><td>1</td><td>OFF</td><td>agreed</td><td>통과</td><td>171.7</td><td>10</td><td>417,924</td><td>0</td><td>0</td></tr><tr><td>revision</td><td>1</td><td>ON</td><td>agreed</td><td>통과</td><td>113.6</td><td>7</td><td>275,579</td><td>2</td><td>2</td></tr><tr><td>arithmetic</td><td>2</td><td>ON</td><td>agreed</td><td>통과</td><td>93.7</td><td>7</td><td>243,157</td><td>2</td><td>2</td></tr><tr><td>arithmetic</td><td>2</td><td>OFF</td><td>agreed</td><td>통과</td><td>136.6</td><td>9</td><td>323,492</td><td>0</td><td>0</td></tr><tr><td>code</td><td>2</td><td>ON</td><td>agreed</td><td>통과</td><td>103.0</td><td>7</td><td>233,715</td><td>2</td><td>2</td></tr><tr><td>code</td><td>2</td><td>OFF</td><td>blocked</td><td>통과</td><td>189.7</td><td>10</td><td>379,694</td><td>0</td><td>0</td></tr><tr><td>revision</td><td>2</td><td>ON</td><td>agreed</td><td>통과</td><td>101.5</td><td>7</td><td>257,753</td><td>2</td><td>2</td></tr><tr><td>revision</td><td>2</td><td>OFF</td><td>agreed</td><td>미충족</td><td>235.3</td><td>12</td><td>514,357</td><td>0</td><td>0</td></tr></tbody></table></div></section><section><h2>실험 방법과 해석 범위</h2><pre>
+
+- Claude `opus`, Codex `gpt-6-astra` 요청 모델 고정. 실제 서비스 모델 변경 가능성이 있는 별칭이며 Codex의 실제 제공 모델은 CLI 출력에서 보장되지 않음.
+- 산술 수정, Python off-by-one 분석, 테넌트별 캐시 설계의 3종류 × 2회 × OFF/ON. 첫 반복 OFF→ON, 두 번째 ON→OFF로 순서 교대.
+- 실제 두 CLI가 분석·후보 작성·교차 검토·합의하도록 HUB 실행기를 사용. 늦은 동료 질문은 동일한 테스트 스크립트가 각 CLI 프로세스 시작 확인 후 주입. 실제 동료가 자율 생성한 질문의 벤치마크는 아님.
+- 격리 SQLite에서 실행하며 Coral 메시지 발송 없음. 실서비스 설정·채널은 유지. 라운드 상한 7분/시작 과제 14개.
+- 정답 판정은 사전 고정한 JSON 필수 값 일치. 정답 후보와 전원 합의 성공은 별도로 표기. 일반 업무 품질이나 개방형 설계의 최적성을 측정하지 않음.
+- 모든 과제는 첫 단계에서 파일 읽기를 요구함. 도구 완료 경계가 생기는 조건을 의도적으로 구성했으며, 도구 없는 대화의 성능은 측정하지 않음.
+- 경과 시간은 요청부터 종료 이벤트까지. CLI 캐시·서버 부하·네트워크를 통제하지 않았으며 소표본 결과임.
+- 토큰은 CLI 보고값만 사용. Claude는 입력+캐시 읽기+캐시 생성+출력, Codex는 입력(캐시 포함)+출력. 금액이나 구독 차감량이 아님. 서로 다른 모델의 토큰을 합친 값은 작업량 참고치이며 비용 환산 불가.
+
+</pre><p class="note">원본 수신함과 native CLI 로그는 격리된 로컬 실험 폴더에 보존합니다. 절감 수치는 이 테스트에 한정되며 정답률 향상이나 일반 업무의 절감률을 입증하지 않습니다.</p></section><section><h2>결론과 발견된 실패</h2><pre>
+## 이번 측정의 결론
+
+동일한 3개 과제의 2회 반복에서 ON이 전체 CLI 호출·경과 시간 중앙값·보고 토큰 합계를 줄였습니다. 모든 과제는 실행 중 수정 메시지와 도구 읽기를 포함한 제한된 조건입니다. 일반 업무 절감률 또는 정확도 향상의 증거로 확대 해석하지 않습니다.
+
+- 요청 종료 시간 중앙값: OFF 171.1초 → ON 103.2초 (39.7% 감소). 보류 실행도 포함한 값.
+- CLI 호출 합계: 59 → 42 (28.8% 감소).
+- 보고 토큰 합계: 2,263,673 → 1,552,075 (31.4% 감소). 캐시 포함, 실제 비용·사용 한도 차감액 아님.
+- 필수값+합의 성공: OFF 4/6, ON 6/6. 합의 자체는 OFF 5/6, ON 6/6. 표본이 작아 일반적인 정확도 향상을 입증하지 않음.
+- ON 경계 수신 확인 12건, 일반 질문 호출 취소 12건. OFF의 기본 묶음 전달도 호출을 취소하므로 이 수치를 전체 호출 절감과 동일시하지 않음.
+
+## 발견된 실패와 다음 개선점
+
+`revision-r2-off`는 **잘못된 최종안에 전원 승인**했습니다. 늦은 질문에 명시된 revision 필수 조건을 원본 파일의 선택 옵션 설명보다 낮게 취급했고, 동료 질문·답변 과정에서 필수 조건을 철회했습니다. 최종 key_fields에서 revision을 누락해 같은 사용자에 대한 서로 다른 리비전이 캐시를 공유하게 됩니다. 메시지는 전달됐지만 조건 보존에 실패했습니다. 실행 중 수정 조건을 고정해 최종안과 대조하는 검증이 가장 중요한 후속 개선입니다. 합의 성공과 정답은 별개라는 실제 반례입니다.
+
+
+`code-r2-off`는 JSON 필수값을 맞혔지만 전원 합의에 실패했습니다. Claude 후보에 `def total(n): if n&lt;0: ...` 형태의 실행 불가능한 한 줄 Python 코드가 포함됐습니다. Codex가 이 문법 오류를 올바르게 반대했으나, 응답의 proposal_hash에서 한 글자를 누락해 HUB가 검토표를 거부하고 보류했습니다. 근거 없는 승인으로 통과시키지는 않았습니다.
+
+- JSON 값 일치 검사는 코드 문법·실행 가능성 검증을 대체하지 못합니다. 제시 코드의 별도 검증이 필요합니다.
+- 정확한 해시가 필요한 검토표의 단순 복사 오류에 대한 제한된 형식 복구가 다음 개선 후보입니다. 반대 의견을 보존해야 하며, 임의로 승인을 만들어서는 안 됩니다.
+- ON도 이번 6회 모두 7번의 CLI 실행을 사용했습니다. 메시지 수신 때문에 새 호출을 만들지 않는다는 의미이며 전체 협업이 0회 호출이라는 뜻은 아닙니다.
+- 비교 중 제품 코드·프롬프트 정책은 변경하지 않았습니다. 실패 실행을 재실행하여 대체하지 않았습니다.
+
+## 전달 기록 감사
+
+완료된 12라운드에서 테스트 추가 조건 24건 중 24건이 완료 과제에 전달됐습니다. 같은 task/event 조합의 중복 경계 기록은 0건입니다. 이는 DB 전달 기록의 검증이며 모든 메시지의 의미적 이해를 독립 증명하지 않습니다.
+
+Claude native modelUsage에서는 `claude-opus-4-8`이 관찰됐습니다. Codex는 요청 모델 `gpt-6-astra`이며 실제 제공 모델 식별값은 별도 검증하지 못했습니다.
+</pre></section></main></html>

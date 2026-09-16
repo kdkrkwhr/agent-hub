@@ -35,11 +35,17 @@ def make_server(hub,port):
             if path=='/api/bootstrap':
                 from .adapters import inventory
                 return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.1.0'})
+            if path=='/api/pipeline/artifact':
+                try:
+                    query=parse_qs(urlsplit(self.path).query)
+                    with hub.lock:data=hub.pipeline.artifact(query.get('id',[''])[0],query.get('name',[''])[0])
+                    return self.reply(200,data,'application/octet-stream')
+                except ValueError as e:return self.reply(404,{'error':str(e)})
             if path=='/api/result':
                 try:return self.reply(200,hub.result(parse_qs(urlsplit(self.path).query).get('id',[''])[0]))
                 except ValueError as e:return self.reply(404,{'error':str(e)})
             name='index.html' if path=='/' else path.lstrip('/')
-            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js','office.js'}
+            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js','office.js','voting.js','pipeline.js'}
             if name not in allowed:return self.reply(404,{'error':'Not found.'})
             self.reply(200,(STATIC/name).read_bytes(),mimetypes.guess_type(name)[0] or 'application/octet-stream')
         def do_POST(self):
@@ -56,6 +62,17 @@ def make_server(hub,port):
                 elif self.path=='/api/test':result=hub.test_connection(body)
                 elif self.path=='/api/thread':result={'id':hub.new_thread(body.get('name'))}
                 elif self.path=='/api/thread/close':hub.close_thread(body.get('threadId'),body.get('summary'));result={'ok':True}
+                elif self.path=='/api/pipeline/commands':
+                    from .test_commands import discover
+                    result=discover(body.get('source'))
+                elif self.path=='/api/pipeline':
+                    with hub.lock:result=hub.pipeline.start(body)
+                elif self.path=='/api/pipeline/cancel':
+                    with hub.lock:hub.pipeline.cancel(body.get('id'));result={'ok':True}
+                elif self.path=='/api/poll':
+                    with hub.lock:result=hub.voting.start(body)
+                elif self.path=='/api/poll/cancel':
+                    with hub.lock:hub.voting.cancel(body.get('id'));result={'ok':True}
                 elif self.path=='/api/message':hub.message(body.get('threadId'),body.get('text'),body.get('mentions',[]));result={'ok':True}
                 elif self.path=='/api/automatic':hub.set_automatic(body.get('enabled'));result={'ok':True}
                 elif self.path=='/api/collaboration/cancel':hub.cancel_round(body.get('id'));result={'ok':True}

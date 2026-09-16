@@ -1,0 +1,635 @@
+{
+  "summary": {
+    "OFF": {
+      "runs": 6,
+      "agreed": 5,
+      "success": 4,
+      "json_criteria_pass": 5,
+      "median_seconds": 171.09993970394135,
+      "calls": 59,
+      "tokens": 2263673,
+      "usage_complete": true,
+      "boundary_received": 0,
+      "cancelled": 0
+    },
+    "ON": {
+      "runs": 6,
+      "agreed": 6,
+      "success": 6,
+      "json_criteria_pass": 6,
+      "median_seconds": 103.16909158229828,
+      "calls": 42,
+      "tokens": 1552075,
+      "usage_complete": true,
+      "boundary_received": 12,
+      "cancelled": 12
+    }
+  },
+  "reduction_percent": {
+    "median_seconds": 39.7,
+    "calls": 28.8,
+    "tokens": 31.4
+  },
+  "runs": [
+    {
+      "run": "arithmetic-r1-off",
+      "case": "arithmetic",
+      "repeat": 1,
+      "enabled": false,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 170.4843590259552,
+      "calls": 10,
+      "metrics": {
+        "elapsed_seconds": 170.4843590259552,
+        "calls": 10,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 145.82903861999512,
+            "usage": {
+              "output_tokens": 4200,
+              "cache_creation_input_tokens": 53287,
+              "cache_read_input_tokens": 82169,
+              "input_tokens": 20769
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 160425
+          },
+          {
+            "agent": "codex",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 118.97854685783386,
+            "usage": {
+              "output_tokens": 1230,
+              "cached_input_tokens": 113792,
+              "input_tokens": 175355
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 176585
+          }
+        ],
+        "bundled_questions": 2,
+        "boundary_offered": 0,
+        "boundary_received": 0,
+        "boundary_cancelled_calls": 0
+      },
+      "reported_total_tokens": 337010,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "arithmetic-r1-on",
+      "case": "arithmetic",
+      "repeat": 1,
+      "enabled": true,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 103.32401847839355,
+      "calls": 7,
+      "metrics": {
+        "elapsed_seconds": 103.32401847839355,
+        "calls": 7,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 101.17372298240662,
+            "usage": {
+              "output_tokens": 2352,
+              "cache_creation_input_tokens": 38994,
+              "cache_read_input_tokens": 67423,
+              "input_tokens": 16616
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 125385
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 79.74778747558594,
+            "usage": {
+              "output_tokens": 768,
+              "cached_input_tokens": 89728,
+              "input_tokens": 129747
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 130515
+          }
+        ],
+        "bundled_questions": 0,
+        "boundary_offered": 2,
+        "boundary_received": 2,
+        "boundary_cancelled_calls": 2
+      },
+      "reported_total_tokens": 255900,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "code-r1-off",
+      "case": "code",
+      "repeat": 1,
+      "enabled": false,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 145.12138748168945,
+      "calls": 8,
+      "metrics": {
+        "elapsed_seconds": 145.12138748168945,
+        "calls": 8,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 143.45783376693726,
+            "usage": {
+              "output_tokens": 5268,
+              "cache_creation_input_tokens": 51818,
+              "cache_read_input_tokens": 79615,
+              "input_tokens": 20767
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 157468
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 81.50417065620422,
+            "usage": {
+              "output_tokens": 883,
+              "cached_input_tokens": 100864,
+              "input_tokens": 132845
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 133728
+          }
+        ],
+        "bundled_questions": 2,
+        "boundary_offered": 0,
+        "boundary_received": 0,
+        "boundary_cancelled_calls": 0
+      },
+      "reported_total_tokens": 291196,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "code-r1-on",
+      "case": "code",
+      "repeat": 1,
+      "enabled": true,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 108.43336462974548,
+      "calls": 7,
+      "metrics": {
+        "elapsed_seconds": 108.43336462974548,
+        "calls": 7,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 107.72141170501709,
+            "usage": {
+              "output_tokens": 3162,
+              "cache_creation_input_tokens": 40795,
+              "cache_read_input_tokens": 94578,
+              "input_tokens": 16620
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 155155
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 78.85688161849976,
+            "usage": {
+              "output_tokens": 833,
+              "cached_input_tokens": 101632,
+              "input_tokens": 129983
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 130816
+          }
+        ],
+        "bundled_questions": 0,
+        "boundary_offered": 2,
+        "boundary_received": 2,
+        "boundary_cancelled_calls": 2
+      },
+      "reported_total_tokens": 285971,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "revision-r1-off",
+      "case": "revision",
+      "repeat": 1,
+      "enabled": false,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 171.7155203819275,
+      "calls": 10,
+      "metrics": {
+        "elapsed_seconds": 171.7155203819275,
+        "calls": 10,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 150.23488450050354,
+            "usage": {
+              "output_tokens": 5401,
+              "cache_creation_input_tokens": 55719,
+              "cache_read_input_tokens": 112808,
+              "input_tokens": 20773
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 194701
+          },
+          {
+            "agent": "codex",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 124.96374678611755,
+            "usage": {
+              "output_tokens": 1382,
+              "cached_input_tokens": 170624,
+              "input_tokens": 221841
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 223223
+          }
+        ],
+        "bundled_questions": 2,
+        "boundary_offered": 0,
+        "boundary_received": 0,
+        "boundary_cancelled_calls": 0
+      },
+      "reported_total_tokens": 417924,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "revision-r1-on",
+      "case": "revision",
+      "repeat": 1,
+      "enabled": true,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 113.56460380554199,
+      "calls": 7,
+      "metrics": {
+        "elapsed_seconds": 113.56460380554199,
+        "calls": 7,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 113.08035445213318,
+            "usage": {
+              "output_tokens": 3837,
+              "cache_creation_input_tokens": 42281,
+              "cache_read_input_tokens": 81843,
+              "input_tokens": 16618
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 144579
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 79.52786302566528,
+            "usage": {
+              "output_tokens": 779,
+              "cached_input_tokens": 111232,
+              "input_tokens": 130221
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 131000
+          }
+        ],
+        "bundled_questions": 0,
+        "boundary_offered": 2,
+        "boundary_received": 2,
+        "boundary_cancelled_calls": 2
+      },
+      "reported_total_tokens": 275579,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "arithmetic-r2-on",
+      "case": "arithmetic",
+      "repeat": 2,
+      "enabled": true,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 93.67630362510681,
+      "calls": 7,
+      "metrics": {
+        "elapsed_seconds": 93.67630362510681,
+        "calls": 7,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 84.30077362060547,
+            "usage": {
+              "output_tokens": 2030,
+              "cache_creation_input_tokens": 38734,
+              "cache_read_input_tokens": 55288,
+              "input_tokens": 16614
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 112666
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 74.5595293045044,
+            "usage": {
+              "output_tokens": 762,
+              "cached_input_tokens": 99328,
+              "input_tokens": 129729
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 130491
+          }
+        ],
+        "bundled_questions": 0,
+        "boundary_offered": 2,
+        "boundary_received": 2,
+        "boundary_cancelled_calls": 2
+      },
+      "reported_total_tokens": 243157,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "arithmetic-r2-off",
+      "case": "arithmetic",
+      "repeat": 2,
+      "enabled": false,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 136.5876076221466,
+      "calls": 9,
+      "metrics": {
+        "elapsed_seconds": 136.5876076221466,
+        "calls": 9,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 114.69763135910034,
+            "usage": {
+              "output_tokens": 3581,
+              "cache_creation_input_tokens": 49134,
+              "cache_read_input_tokens": 72796,
+              "input_tokens": 20767
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 146278
+          },
+          {
+            "agent": "codex",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 94.60770869255066,
+            "usage": {
+              "output_tokens": 1024,
+              "cached_input_tokens": 136448,
+              "input_tokens": 176190
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 177214
+          }
+        ],
+        "bundled_questions": 2,
+        "boundary_offered": 0,
+        "boundary_received": 0,
+        "boundary_cancelled_calls": 0
+      },
+      "reported_total_tokens": 323492,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "code-r2-on",
+      "case": "code",
+      "repeat": 2,
+      "enabled": true,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 103.014164686203,
+      "calls": 7,
+      "metrics": {
+        "elapsed_seconds": 103.014164686203,
+        "calls": 7,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 99.24787259101868,
+            "usage": {
+              "output_tokens": 2958,
+              "cache_creation_input_tokens": 35935,
+              "cache_read_input_tokens": 47355,
+              "input_tokens": 16612
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 102860
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 73.61076402664185,
+            "usage": {
+              "output_tokens": 820,
+              "cached_input_tokens": 111232,
+              "input_tokens": 130035
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 130855
+          }
+        ],
+        "bundled_questions": 0,
+        "boundary_offered": 2,
+        "boundary_received": 2,
+        "boundary_cancelled_calls": 2
+      },
+      "reported_total_tokens": 233715,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "code-r2-off",
+      "case": "code",
+      "repeat": 2,
+      "enabled": false,
+      "status": "blocked",
+      "criteria_pass": true,
+      "elapsed_seconds": 189.73760509490967,
+      "calls": 10,
+      "metrics": {
+        "elapsed_seconds": 189.73760509490967,
+        "calls": 10,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 161.6807143688202,
+            "usage": {
+              "output_tokens": 6359,
+              "cache_creation_input_tokens": 52801,
+              "cache_read_input_tokens": 75560,
+              "input_tokens": 20767
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 155487
+          },
+          {
+            "agent": "codex",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 133.87606930732727,
+            "usage": {
+              "output_tokens": 1655,
+              "cached_input_tokens": 180608,
+              "input_tokens": 222552
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 224207
+          }
+        ],
+        "bundled_questions": 2,
+        "boundary_offered": 0,
+        "boundary_received": 0,
+        "boundary_cancelled_calls": 0
+      },
+      "reported_total_tokens": 379694,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "revision-r2-on",
+      "case": "revision",
+      "repeat": 2,
+      "enabled": true,
+      "status": "agreed",
+      "criteria_pass": true,
+      "elapsed_seconds": 101.54623079299927,
+      "calls": 7,
+      "metrics": {
+        "elapsed_seconds": 101.54623079299927,
+        "calls": 7,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 4,
+            "legacy_calls": 0,
+            "seconds": 93.09832429885864,
+            "usage": {
+              "output_tokens": 2438,
+              "cache_creation_input_tokens": 39467,
+              "cache_read_input_tokens": 68876,
+              "input_tokens": 16616
+            },
+            "usage_calls": 4,
+            "reported_total_tokens": 127397
+          },
+          {
+            "agent": "codex",
+            "calls": 3,
+            "legacy_calls": 0,
+            "seconds": 77.7597758769989,
+            "usage": {
+              "output_tokens": 743,
+              "cached_input_tokens": 107008,
+              "input_tokens": 129613
+            },
+            "usage_calls": 3,
+            "reported_total_tokens": 130356
+          }
+        ],
+        "bundled_questions": 0,
+        "boundary_offered": 2,
+        "boundary_received": 2,
+        "boundary_cancelled_calls": 2
+      },
+      "reported_total_tokens": 257753,
+      "usage_complete": true,
+      "version": 2
+    },
+    {
+      "run": "revision-r2-off",
+      "case": "revision",
+      "repeat": 2,
+      "enabled": false,
+      "status": "agreed",
+      "criteria_pass": false,
+      "elapsed_seconds": 235.3045358657837,
+      "calls": 12,
+      "metrics": {
+        "elapsed_seconds": 235.3045358657837,
+        "calls": 12,
+        "agents": [
+          {
+            "agent": "claude",
+            "calls": 7,
+            "legacy_calls": 0,
+            "seconds": 234.33344960212708,
+            "usage": {
+              "output_tokens": 9282,
+              "cache_creation_input_tokens": 82012,
+              "cache_read_input_tokens": 168594,
+              "input_tokens": 29083
+            },
+            "usage_calls": 7,
+            "reported_total_tokens": 288971
+          },
+          {
+            "agent": "codex",
+            "calls": 5,
+            "legacy_calls": 0,
+            "seconds": 120.43014287948608,
+            "usage": {
+              "output_tokens": 1368,
+              "cached_input_tokens": 175232,
+              "input_tokens": 224018
+            },
+            "usage_calls": 5,
+            "reported_total_tokens": 225386
+          }
+        ],
+        "bundled_questions": 2,
+        "boundary_offered": 0,
+        "boundary_received": 0,
+        "boundary_cancelled_calls": 0
+      },
+      "reported_total_tokens": 514357,
+      "usage_complete": true,
+      "version": 3
+    }
+  ]
+}

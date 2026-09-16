@@ -31,6 +31,10 @@ class Hub:
         self.threads=[];self.connected=False;self.error=None;self.updated=None
         self.active={};self.pool=concurrent.futures.ThreadPoolExecutor(max_workers=3)
         self.collaboration=Collaboration(self)
+        from .voting import Voting
+        self.voting=Voting(self)
+        from .pipeline import Pipeline
+        self.pipeline=Pipeline(self)
         self.demo=[];self.revision=0
         self.thread=threading.Thread(target=self.loop,daemon=True)
 
@@ -47,6 +51,8 @@ class Hub:
             old_scope=self.scope(self.config.value or {})
             result=self.config.save(body)
             self.collaboration.suspend(old_scope,'연결 설정이 변경되었습니다.')
+            self.voting.suspend(old_scope,'연결 설정이 변경되어 투표를 취소했습니다.')
+            self.pipeline.suspend(old_scope,'연결 설정 변경으로 역할 작업을 중지했습니다.')
             self.revision+=1;self.threads=[];self.connected=False;self.error=None
             self.db.execute("UPDATE jobs SET status='cancelled',error='Configuration changed.' WHERE status='pending'");self.db.commit()
             if self.config.value['mode']=='demo':self.seed_demo()
@@ -56,7 +62,7 @@ class Hub:
         from .models import info
         with self.lock:
             cfg=dict(self.config.value or {})
-            tasks=[dict(r) for r in self.db.execute("SELECT id,agent,status,started FROM collab_tasks ORDER BY started DESC LIMIT 160")]
+            tasks=[dict(r) for r in self.db.execute("SELECT id,agent,status,started FROM collab_tasks UNION ALL SELECT id,agent,status,started FROM ballots ORDER BY started DESC LIMIT 160")]
         return info(self.root,cfg,tasks)
 
     def save_models(self,body):
@@ -91,7 +97,7 @@ class Hub:
     def snapshot(self):
         with self.lock:
             rounds,collab_jobs=self.collaboration.snapshot(self.scope(self.config.value or {}))
-            return {'collaboration':rounds,'collaboration_jobs':collab_jobs,'configured':self.config.value is not None,'config':self.config.public(),
+            return {'pipelines':self.pipeline.snapshot(self.scope(self.config.value or {})),'polls':self.voting.snapshot(self.scope(self.config.value or {})),'collaboration':rounds,'collaboration_jobs':collab_jobs,'configured':self.config.value is not None,'config':self.config.public(),
                 'connected':self.connected,'error':self.error,'updated':self.updated,
                 'threads':self.threads,'jobs':[dict(r) for r in self.db.execute(
                     "SELECT id,tid,agent,status,attempt,started,ended,error FROM jobs WHERE scope=? AND status NOT IN ('baseline','observed') ORDER BY rowid DESC LIMIT 80",(self.scope(self.config.value or {}),))],
@@ -143,6 +149,8 @@ class Hub:
             if peer:peer.tool('coral_close_thread',threadId=tid,summary=summary.strip())
             else:current['state']='closed'
             self.collaboration.close_thread(tid,scope)
+            self.voting.suspend(scope,'채널이 닫혔습니다.',tid)
+            self.pipeline.suspend(scope,'채널이 닫혀 역할 작업을 중지했습니다.',tid)
             self.db.execute('UPDATE archives SET confirmed=1 WHERE scope=? AND tid=?',(scope,tid))
             self.db.execute("UPDATE jobs SET status='cancelled',ended=?,error='Channel closed.' WHERE scope=? AND tid=? AND status IN ('pending','ready')",(time.time(),scope,tid))
             self.db.commit()
@@ -161,6 +169,8 @@ class Hub:
                 t['messages'].append({'sendingAgentName':'hub','messageText':text,'messageTimestamp':time.time(),'mentionAgentNames':mentions})
                 for a in mentions:t['messages'].append({'sendingAgentName':a,'messageText':'[데모 응답] 메시지를 수신했습니다. 실제 모델은 호출하지 않았습니다.','messageTimestamp':time.time(),'mentionAgentNames':[]})
                 return
+            active_poll=self.db.execute("SELECT 1 FROM polls WHERE scope=? AND tid=? AND status='active'",(self.scope(cfg),tid)).fetchone()
+            if active_poll or self.pipeline.active_channel(self.scope(cfg),tid):mentions=[]
         self.peer(cfg['observer'],cfg).tool('coral_send_message',threadId=tid,content=text,mentions=mentions)
 
     def set_automatic(self,enabled):
@@ -179,6 +189,8 @@ class Hub:
             if not enabled:
                 self.observe_pending(updated)
                 self.collaboration.suspend(self.scope(updated),'허브 실행을 중지했습니다.')
+                self.voting.suspend(self.scope(updated),'허브 실행을 중지하여 투표를 취소했습니다.')
+                self.pipeline.suspend(self.scope(updated),'허브 실행을 중지했습니다.')
 
     def observe_pending(self,cfg):
         self.db.execute("UPDATE jobs SET status='observed',ended=? WHERE scope=? AND status='pending'",
@@ -203,6 +215,10 @@ class Hub:
 
     def cancel(self,key):
         with self.lock:
+            step=self.db.execute('SELECT pipeline_id FROM pipeline_tasks WHERE id=?',(key,)).fetchone()
+            if step:self.pipeline.cancel(step['pipeline_id']);return
+            ballot=self.db.execute('SELECT poll_id FROM ballots WHERE id=?',(key,)).fetchone()
+            if ballot:self.voting.cancel(ballot['poll_id']);return
             task=self.db.execute('SELECT round_id FROM collab_tasks WHERE id=?',(key,)).fetchone()
             if task:
                 self.collaboration.end(task['round_id'],'cancelled','사용자가 협업을 취소했습니다.');self.db.commit();return
@@ -232,6 +248,11 @@ class Hub:
 
     def result(self,key):
         with self.lock:
+            if key.startswith('ballot-'):return self.voting.result(key)
+            if key.startswith('step-'):
+                row=self.db.execute('SELECT result FROM pipeline_tasks WHERE id=?',(key,)).fetchone()
+                if not row:raise ValueError('작업을 찾을 수 없습니다.')
+                return json.loads(row['result']) if row['result'] else None
             row=self.db.execute('SELECT result FROM collab_tasks WHERE id=?',(key,)).fetchone()
             if row is None:row=self.db.execute('SELECT result FROM jobs WHERE id=?',(key,)).fetchone()
             if not row:raise ValueError('Job not found.')
@@ -290,9 +311,14 @@ class Hub:
 
     def loop(self):
         while not self.stop.is_set():
-            with self.lock:cfg=self.config.value;revision=self.revision
+            with self.lock:
+                cfg=self.config.value;revision=self.revision
             try:
                 if cfg:
+                    with self.lock:
+                        if revision!=self.revision:continue
+                        self.pipeline.tick(cfg)
+                        self.voting.tick(cfg)
                     if cfg['mode']=='demo':
                         with self.lock:
                             if not self.demo:self.seed_demo()
@@ -302,7 +328,14 @@ class Hub:
                         if revision!=self.revision:continue
                         threads=self.archived_threads(threads,cfg)
                         self.threads=threads;self.connected=True;self.error=None;self.updated=time.time()
-                        if cfg['mode']=='coral':self.collaboration.ingest(threads,cfg);self.collaboration.tick(cfg,threads)
+                        if cfg['mode']=='coral':
+                            for t in threads:
+                                if t.get('state')=='closed':
+                                    self.voting.suspend(self.scope(cfg),'채널이 닫혔습니다.',t['threadId'])
+                                    self.pipeline.suspend(self.scope(cfg),'채널이 닫혔습니다.',t['threadId'])
+                            self.collaboration.ingest(threads,cfg);self.collaboration.tick(cfg,threads)
+                            self.voting.deliver(cfg,threads)
+                            self.pipeline.deliver(cfg,threads)
             except Exception:
                 with self.lock:self.connected=False;self.error='Coral connection unavailable. Retrying; check connection settings.'
             self.stop.wait(3)

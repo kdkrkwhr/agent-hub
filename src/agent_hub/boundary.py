@@ -1,4 +1,4 @@
-"""Opt-in Claude tool-boundary inbox delivery. No model calls or global hooks."""
+"""Opt-in Claude/Codex tool-boundary inbox delivery. No model calls or global hooks."""
 import json
 import os
 from pathlib import Path
@@ -58,7 +58,7 @@ def output(batch):
 def main():
     try:
         event=json.load(sys.stdin)
-        if event.get('hook_event_name')!='PostToolUse' or event.get('tool_name') not in ('Read','Glob','Grep'):
+        if event.get('hook_event_name')!='PostToolUse' or event.get('tool_name') not in (('Bash',) if '--codex' in sys.argv else ('Read','Glob','Grep')):
             print('{}');return
         print(json.dumps(output(drain(os.environ['AGENT_HUB_BOUNDARY_DB'],os.environ['AGENT_HUB_BOUNDARY_TASK'])),ensure_ascii=False))
     except Exception:

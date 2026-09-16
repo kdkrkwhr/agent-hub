@@ -1,0 +1,29 @@
+{
+  "status": "passed",
+  "fixture": "Temporary Git repository; initial completed task seeded by a scripted adapter. Follow-up and read-only question used real CLIs.",
+  "agents": [
+    "codex",
+    "claude"
+  ],
+  "native_calls": 3,
+  "seconds": 114.5,
+  "same_workspace": true,
+  "old_artifact_preserved": true,
+  "original_unchanged": true,
+  "document_created": true,
+  "coral_posts": 0,
+  "python_tests": {
+    "run": 132,
+    "passed": 131,
+    "skipped": 1
+  },
+  "office_tests": 7,
+  "ui": [
+    "followup target",
+    "single agent",
+    "office request",
+    "read-only question",
+    "mobile layout"
+  ],
+  "note": "First native attempt hit access denied in a restrictive test temporary directory. Retested using the normal Hub directory creation method; no sandbox or permission bypass."
+}
