@@ -54,7 +54,7 @@ def register(root,config):
                 if 'error' in result:raise RuntimeError('Codex hook registration failed: '+str(result['error'].get('message')))
                 return result.get('result',{})
     try:
-        rpc(1,'initialize',{'clientInfo':{'name':'agent-hub','version':'0.2.0'},'capabilities':{'experimentalApi':True}})
+        rpc(1,'initialize',{'clientInfo':{'name':'agent-hub','version':'0.3.0'},'capabilities':{'experimentalApi':True}})
         proc.stdin.write('{"method":"initialized","params":{}}\n');proc.stdin.flush()
         data=rpc(2,'hooks/list',{'cwds':[str(root)]})
         matches=[h for entry in data.get('data',[]) for h in entry.get('hooks',[]) if h.get('source')=='sessionFlags' and h.get('eventName')=='postToolUse' and h.get('command')==command and h.get('matcher')=='^Bash$' and h.get('timeoutSec')==5 and not h.get('async')]

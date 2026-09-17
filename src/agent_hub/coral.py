@@ -10,7 +10,7 @@ class Peer:
         self.url=url;self.serial=0
         self.headers={'Content-Type':'application/json','Accept':'application/json, text/event-stream'}
         init=self.call('initialize',{'protocolVersion':'2025-06-18','capabilities':{},
-                    'clientInfo':{'name':'agent-hub-radio','version':'0.1.0'}})
+                    'clientInfo':{'name':'agent-hub-radio','version':'0.3.0'}})
         self.headers['MCP-Protocol-Version']=init['protocolVersion']
         self.call('notifications/initialized',{},notification=True)
 

@@ -102,7 +102,7 @@ def load_codex(root,cfg):
                 if 'error' in value:raise ValueError('Codex model metadata unavailable.')
                 return value.get('result',{})
     try:
-        rpc(1,'initialize',{'clientInfo':{'name':'agent-hub','version':'0.1.0'}})
+        rpc(1,'initialize',{'clientInfo':{'name':'agent-hub','version':'0.3.0'}})
         proc.stdin.write(json.dumps({'method':'initialized','params':{}})+'\n');proc.stdin.flush()
         config=rpc(2,'config/read',{'includeLayers':False}).get('config',{})
         data=rpc(3,'model/list',{}).get('data',[])
