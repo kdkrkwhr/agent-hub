@@ -1,4 +1,5 @@
 """Per-user configuration. No credentials are returned to the UI or logged."""
+from .storage import path as storage_path
 import json
 import os
 import re
@@ -9,7 +10,7 @@ from urllib.parse import urlsplit
 
 PROVIDERS = ('claude', 'codex', 'cursor')
 
-def data_directory():
+def default_data_directory():
     if os.environ.get('AGENT_HUB_HOME'):
         return Path(os.environ['AGENT_HUB_HOME']).expanduser().resolve()
     if sys.platform == 'win32':
@@ -17,6 +18,12 @@ def data_directory():
     if sys.platform == 'darwin':
         return Path.home()/'Library/Application Support/AgentHub'
     return Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state')))/'agent-hub'
+
+def data_directory():
+    if os.environ.get('AGENT_HUB_HOME'):return Path(os.environ['AGENT_HUB_HOME']).expanduser().resolve()
+    from .storage import remembered
+    return remembered() or default_data_directory()
+
 
 def atomic_json(path, value):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
@@ -43,7 +50,7 @@ def valid_url(value):
 
 class Config:
     def __init__(self,root):
-        self.root=Path(root);self.path=self.root/'config.json'
+        self.root=Path(root);self.path=storage_path(self.root,'config.json')
         self.value=json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else None
 
     def prepare(self,body):

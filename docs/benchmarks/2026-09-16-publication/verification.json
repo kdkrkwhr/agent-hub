@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "publication_tests": 10,
+  "pipeline_regression_tests": 25,
+  "other_python_tests": 107,
+  "environment_skips": 1,
+  "ui": [
+    "preview",
+    "explicit confirmation",
+    "apply only",
+    "commit after apply",
+    "desktop/mobile layout"
+  ],
+  "git_verification": [
+    "actual local bare remote push",
+    "remote divergence rejected before mutation",
+    "unrelated staged files rejected",
+    "stale preview rejected",
+    "binary additions and deletions",
+    "user commit/push hooks preserved"
+  ],
+  "external_pushes": 0,
+  "note": "Deletion handling exposed an existing workspace fingerprint issue after index removal; fixed by retaining baseline paths and reran six affected integration tests successfully."
+}

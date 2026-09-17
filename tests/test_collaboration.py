@@ -14,7 +14,11 @@ class CollaborationTests(unittest.TestCase):
  def tearDown(self):self.hub.close();self.temp.cleanup()
  def request(self,text='Investigate',timestamp=1,mentions=None):
   t={'threadId':'t','state':'open','messages':[{'sendingAgentName':'ops','messageText':text,'messageTimestamp':timestamp,'mentionAgentNames':self.cfg['agents'] if mentions is None else mentions}]}
-  self.c.ingest([t],self.cfg);return self.hub.db.execute('SELECT id FROM collab_rounds ORDER BY created DESC LIMIT 1').fetchone()[0]
+  self.c.ingest([t],self.cfg)
+  rid=self.hub.db.execute('SELECT id FROM collab_rounds ORDER BY created DESC LIMIT 1').fetchone()[0]
+  # Preserve coverage for rounds created before author-excluding review.
+  self.hub.db.execute("DELETE FROM collab_events WHERE round_id=? AND kind='peer_review_policy'",(rid,))
+  return rid
  def task(self,agent=None):
   query="SELECT * FROM collab_tasks WHERE status='pending'";args=()
   if agent:query+=' AND agent=?';args=(agent,)
@@ -31,13 +35,20 @@ class CollaborationTests(unittest.TestCase):
    self.reply(self.task())
   self.fail('review not reached')
  def test_exploration_barrier_roles_and_inboxes(self):
-  rid=self.request();self.reply(self.task('claude'),messages=[{'to':'codex','text':'Check source A'}])
+  rid=self.request();self.reply(self.task('claude'),reply='Private Claude opinion',messages=[{'to':'codex','text':'Check source A'}])
   self.assertEqual(self.c.get(rid)['stage'],'explore')
-  ctx=self.c.task_context(self.task('codex'));self.assertTrue(any(e['content']=='Check source A' for e in ctx['inbox']))
-  self.reply(self.task('codex'));self.reply(self.task('cursor'));self.assertEqual(self.c.get(rid)['stage'],'plan')
-  self.assertEqual(self.hub.db.execute("SELECT COUNT(*) FROM collab_tasks WHERE stage='consult'").fetchone()[0],0)
-  self.reply(self.task());self.assertEqual(self.c.get(rid)['stage'],'execute')
-  self.assertEqual(len(json.loads(self.c.get(rid)['assignments'])),3)
+  ctx=self.c.task_context(self.task('codex'));self.assertEqual(ctx['independent_opinions'],[])
+  self.assertNotIn('Private Claude opinion',json.dumps(ctx));self.assertNotIn('Check source A',json.dumps(ctx))
+  rounds,_=self.c.snapshot(self.hub.scope(self.cfg));self.assertNotIn('Private Claude opinion',json.dumps(rounds))
+  self.reply(self.task('codex'),reply='Codex alternative');self.reply(self.task('cursor'),reply='Cursor alternative')
+  self.assertEqual(self.c.get(rid)['stage'],'debate')
+  ctx=self.c.task_context(self.task('claude'));self.assertEqual({x['agent'] for x in ctx['independent_opinions']},set(self.cfg['agents']))
+  self.assertEqual(self.task('codex')['stage'],'consult')
+  self.assertTrue(any(e['content']=='Check source A' for e in self.c.task_context(self.task('codex'))['inbox']))
+  self.reply(self.task('claude'))
+  self.assertEqual(self.c.get(rid)['stage'],'debate')
+  self.reply(self.task('codex'))
+  self.assertEqual(self.c.get(rid)['stage'],'synthesize')
  def test_single_final_only_after_all_exact_votes(self):
   rid=self.request();self.to_review(rid)
   self.reply(self.task('claude'));self.reply(self.task('codex'));self.assertEqual(self.c.get(rid)['status'],'active')
@@ -57,6 +68,7 @@ class CollaborationTests(unittest.TestCase):
  def test_plan_format_correction_preserves_result_and_reaches_consensus(self):
   rid=self.request()
   for _ in range(3):self.reply(self.task())
+  self.hub.db.execute("UPDATE collab_tasks SET status='cancelled' WHERE status='pending'");self.c.enqueue(rid,'plan',['claude'])
   task=self.task();self.reply(task,assignments=None,reply='Roles were only written in prose')
   self.assertEqual(self.c.get(rid)['status'],'active')
   self.assertEqual(self.task()['id'],task['id'])
@@ -68,44 +80,38 @@ class CollaborationTests(unittest.TestCase):
  def test_plan_format_correction_is_bounded_and_auditable(self):
   rid=self.request()
   for _ in range(3):self.reply(self.task())
+  self.hub.db.execute("UPDATE collab_tasks SET status='cancelled' WHERE status='pending'");self.c.enqueue(rid,'plan',['claude'])
   self.reply(self.task(),assignments={})
   task=self.task();self.reply(task,assignments={})
   self.assertEqual(self.c.get(rid)['status'],'blocked')
   saved=self.hub.db.execute('SELECT status,result,error FROM collab_tasks WHERE id=?',(task['id'],)).fetchone()
   self.assertEqual(saved['status'],'failed');self.assertEqual(json.loads(saved['result'])['assignments'],{})
   self.assertIn('TOP-LEVEL',saved['error'])
- def test_ready_candidate_opens_review_without_team_barrier(self):
-  rid=self.request();self.reply(self.task('codex'),candidate='Sum 21, product 180')
-  self.assertEqual(self.c.get(rid)['stage'],'review')
-  # Codex can review while the other agents have not finished exploration.
-  self.assertEqual(self.task('codex')['stage'],'review');self.reply(self.task('codex'))
-  self.assertEqual(self.c.get(rid)['status'],'active')
+ def test_ready_candidate_waits_for_all_independent_opinions(self):
+  rid=self.request();first=self.task('codex');self.reply(first,candidate='Sum 21, product 180')
+  self.assertEqual(self.c.get(rid)['stage'],'explore');self.assertIsNone(self.task('codex'))
+  self.assertNotIn('Sum 21',json.dumps(self.hub.result(first['id'])))
   self.reply(self.task('claude'),candidate='A competing answer')
   self.reply(self.task('cursor'),candidate='Another competing answer')
-  self.assertEqual(self.c.get(rid)['proposal'],'Sum 21, product 180')
-  self.reply(self.task('claude'));self.reply(self.task('cursor'))
-  self.assertEqual(self.c.get(rid)['status'],'agreed')
-  stages=[r[0] for r in self.hub.db.execute('SELECT stage FROM collab_tasks')]
-  self.assertEqual(len(stages),6);self.assertNotIn('plan',stages);self.assertNotIn('execute',stages)
- def test_addressed_inbox_work_runs_before_slow_peer_finishes(self):
+  self.assertEqual(self.c.get(rid)['proposal'],'')
+  opinions=self.c.task_context(self.task())['independent_opinions']
+  self.assertIn('Sum 21',json.dumps(opinions));self.assertIn('A competing answer',json.dumps(opinions))
+  self.assertIn('Sum 21',json.dumps(self.hub.result(first['id'])))
+ def test_addressed_questions_wait_for_slow_independent_opinion(self):
   rid=self.request();self.reply(self.task('claude'),messages=[{'to':'codex','text':'Verify the operand count','urgent':True}])
-  self.reply(self.task('codex'))
-  self.assertEqual(self.task('codex')['stage'],'consult')
-  self.reply(self.task('codex'),reply='Three operands verified',candidate='Verified answer')
-  self.assertEqual(self.c.get(rid)['stage'],'review')
-  self.assertEqual(self.task('cursor')['stage'],'explore')
-  self.assertEqual(self.c.get(rid)['guidance'],self.c.get(rid)['proposal_guidance'])
- def test_questions_after_candidate_prevent_stale_final_approval(self):
-  rid=self.request();self.reply(self.task('claude'),candidate='Initial answer')
-  self.reply(self.task('codex'),messages=[{'to':'cursor','text':'Check a missing constraint','urgent':True}])
+  self.reply(self.task('codex'));self.assertIsNone(self.task('codex'))
+  self.assertEqual(self.c.get(rid)['stage'],'explore')
   self.reply(self.task('cursor'))
-  # Finish review tasks first deliberately; final must still wait for consultation.
-  for agent in self.cfg['agents']:
-   task=self.hub.db.execute("SELECT * FROM collab_tasks WHERE agent=? AND stage='review'",(agent,)).fetchone();self.reply(task)
+  self.assertEqual(self.c.get(rid)['stage'],'debate')
+  self.assertEqual(self.hub.db.execute("SELECT count(*) FROM collab_tasks WHERE stage='consult'").fetchone()[0],1)
+ def test_questions_after_candidate_prevent_stale_final_approval(self):
+  rid=self.request();self.to_review(rid)
+  self.reply(self.task('codex'),messages=[{'to':'cursor','text':'Check a missing constraint','urgent':True}])
+  self.reply(self.task('claude'));self.reply(self.task('cursor'))
   self.assertEqual(self.c.get(rid)['status'],'active')
   self.assertEqual(self.task()['stage'],'consult');self.reply(self.task(),reply='Constraint verified')
   self.assertEqual(self.c.get(rid)['stage'],'synthesize');self.assertEqual(self.c.get(rid)['version'],2)
- def test_fast_path_scheduler_six_calls_and_one_delivery(self):
+ def test_concise_scheduler_eight_calls_and_one_delivery(self):
   rid=self.request()
   def execute(name,cfg,context,incoming,folder,cancel,live):
    c=context['collaboration']
@@ -115,13 +121,13 @@ class CollaborationTests(unittest.TestCase):
     self.c.tick(self.cfg,[{'threadId':'t','state':'open','messages':[]}])
     for a in list(self.hub.active.values()):a['future'].result(timeout=3)
     if self.c.get(rid)['status']=='agreed':break
-   self.assertEqual(self.c.get(rid)['status'],'agreed');self.assertEqual(model.call_count,6);self.assertEqual(peer.return_value.tool.call_count,1)
+   self.assertEqual(self.c.get(rid)['status'],'agreed');self.assertEqual(model.call_count,8);self.assertEqual(peer.return_value.tool.call_count,1)
  def test_only_two_mentioned_agents_execute_and_approve(self):
   rid=self.request(mentions=['codex','cursor','codex','unknown'])
   self.assertEqual(json.loads(self.c.get(rid)['team']),['codex','cursor'])
   self.assertEqual(self.c.get(rid)['lead'],'codex')
   self.reply(self.task('codex'),candidate='Verified answer')
-  self.reply(self.task('cursor'))
+  self.reply(self.task('cursor'));self.to_review(rid)
   self.reply(self.task('codex'));self.assertEqual(self.c.get(rid)['status'],'active')
   self.reply(self.task('cursor'));self.assertEqual(self.c.get(rid)['status'],'agreed')
   self.assertEqual({r[0] for r in self.hub.db.execute('SELECT agent FROM collab_tasks')},{'codex','cursor'})
@@ -193,18 +199,19 @@ class CollaborationTests(unittest.TestCase):
     self.c.tick(self.cfg,[{'threadId':'t','state':'open','messages':[]}])
     for a in list(self.hub.active.values()):a['future'].result(timeout=3)
     if self.c.get(rid)['status']=='agreed':break
-   self.assertEqual(self.c.get(rid)['status'],'agreed');self.assertEqual(model.call_count,11);self.assertEqual(peer.return_value.tool.call_count,1)
+   self.assertEqual(self.c.get(rid)['status'],'agreed');self.assertEqual(model.call_count,8);self.assertEqual(peer.return_value.tool.call_count,1)
 
 
 
  def test_bundled_question_saves_one_call_and_keeps_unanimous_review(self):
   rid=self.request();self.reply(self.task('claude'),messages=[{'to':'codex','text':'Check the constraint'}])
+  self.reply(self.task('codex'));self.reply(self.task('cursor'))
   codex=self.task('codex');self.assertTrue(any(e['content']=='Check the constraint' for e in self.c.task_context(codex)['inbox']))
   for _ in range(20):
    if self.c.get(rid)['status']!='active':break
    self.reply(self.task())
   self.assertEqual(self.c.get(rid)['status'],'agreed')
-  self.assertEqual(self.hub.db.execute('SELECT COUNT(*) FROM collab_tasks WHERE started IS NOT NULL').fetchone()[0],11)
+  self.assertEqual(self.hub.db.execute('SELECT COUNT(*) FROM collab_tasks WHERE started IS NOT NULL').fetchone()[0],9)
   self.assertEqual(self.hub.db.execute("SELECT COUNT(*) FROM collab_tasks WHERE stage='review' AND status='done'").fetchone()[0],3)
 
  def test_urgent_question_keeps_dedicated_call(self):
@@ -213,25 +220,34 @@ class CollaborationTests(unittest.TestCase):
    if self.c.get(rid)['status']!='active':break
    self.reply(self.task())
   self.assertEqual(self.c.get(rid)['status'],'agreed')
-  self.assertEqual(self.hub.db.execute('SELECT COUNT(*) FROM collab_tasks WHERE started IS NOT NULL').fetchone()[0],12)
+  self.assertEqual(self.hub.db.execute('SELECT COUNT(*) FROM collab_tasks WHERE started IS NOT NULL').fetchone()[0],9)
 
  def test_notice_does_not_schedule_consultation_and_duplicates_are_coalesced(self):
   rid=self.request();m={'to':'codex','text':'Source A found','kind':'notice'}
-  self.reply(self.task('claude'),messages=[m,m])
+  self.reply(self.task('claude'),messages=[m,m]);self.reply(self.task('codex'));self.reply(self.task('cursor'))
   self.assertEqual(self.hub.db.execute("SELECT COUNT(*) FROM collab_events WHERE kind='notice'").fetchone()[0],1)
   self.assertEqual(self.hub.db.execute("SELECT COUNT(*) FROM collab_tasks WHERE stage='consult'").fetchone()[0],0)
+  self.to_review(rid)
   self.assertTrue(any(e['kind']=='notice' for e in self.c.task_context(self.task('codex'))['inbox']))
   self.assertEqual(self.c.get(rid)['guidance'],1)
 
  def test_running_task_is_not_modified_by_incoming_question(self):
-  rid=self.request();task=self.task('codex');captured=json.dumps(self.c.task_context(task))
+  rid=self.request()
+  for _ in range(3):self.reply(self.task())
+  self.c.enqueue(rid,'respond',['codex'])
+  task=self.task('codex');captured=json.dumps(self.c.task_context(task))
   self.hub.db.execute("UPDATE collab_tasks SET status='running',input=? WHERE id=?",(captured,task['id']))
   self.reply(self.task('claude'),messages=[{'to':'codex','text':'New question'}])
   self.assertEqual(self.hub.db.execute('SELECT input FROM collab_tasks WHERE id=?',(task['id'],)).fetchone()[0],captured)
   self.assertEqual(self.task('codex')['stage'],'consult')
 
  def test_unread_and_user_guidance_survive_history_limit(self):
-  rid=self.request();long='constraint '*250
+  rid=self.request()
+  for _ in range(3):self.reply(self.task())
+  self.c.enqueue(rid,'respond',['codex'])
+  self.hub.db.execute("UPDATE collab_inbox SET consumed_by='old' WHERE agent='codex'")
+  self.hub.db.execute("DELETE FROM collab_inbox WHERE agent='codex'")
+  long='constraint '*250
   self.c.event(rid,'ops','guidance',long)
   for i in range(30):self.c.event(rid,'claude','notice',str(i),['codex'])
   ctx=self.c.task_context(self.task('codex'))
@@ -239,18 +255,21 @@ class CollaborationTests(unittest.TestCase):
   self.assertNotIn('request',[e['kind'] for e in ctx['inbox']])
   self.hub.db.execute("UPDATE collab_inbox SET consumed_by='old' WHERE agent='codex'")
   ctx=self.c.task_context(self.task('codex'))
-  self.assertEqual(len(ctx['inbox']),25);self.assertEqual(ctx['inbox'][0]['content'],long)
+  self.assertEqual(len(ctx['inbox']),9);self.assertEqual(ctx['inbox'][0]['content'],long)
 
  def test_bundled_review_evidence_invalidates_old_candidate(self):
-  rid=self.request();self.reply(self.task('claude'),candidate='Initial answer',messages=[{'to':'codex','text':'Verify input'}])
-  self.reply(self.task('codex'));self.reply(self.task('cursor'))
+  rid=self.request();self.to_review(rid)
+  seq=self.c.event(rid,'claude','question','Verify input',['codex']);self.c.consult(rid,'codex',seq)
+  self.hub.db.execute('UPDATE collab_rounds SET guidance=guidance+1 WHERE id=?',(rid,))
   for a in self.cfg['agents']:self.reply(self.task(a))
-  self.assertEqual(self.c.get(rid)['status'],'active')
-  self.assertEqual(self.c.get(rid)['stage'],'synthesize')
+  self.assertEqual(self.c.get(rid)['status'],'active');self.assertEqual(self.c.get(rid)['stage'],'synthesize')
   self.assertEqual(self.c.get(rid)['version'],2)
 
  def test_later_scheduled_task_absorbs_pending_normal_consult(self):
-  rid=self.request();self.reply(self.task('claude'))
+  rid=self.request()
+  for _ in range(3):self.reply(self.task())
+  self.reply(self.task('claude'))
+  self.hub.db.execute("UPDATE collab_tasks SET status='cancelled' WHERE status='pending'")
   event=self.c.event(rid,'codex','question','Check input',['claude']);self.c.consult(rid,'claude',event)
   consult=self.task('claude');self.c.enqueue(rid,'review',['claude'])
   def execute(name,cfg,context,*args):return {}
@@ -264,6 +283,7 @@ class CollaborationTests(unittest.TestCase):
 
  def test_duplicate_question_can_be_promoted_to_urgent_without_duplicate_event(self):
   rid=self.request();self.reply(self.task('claude'),messages=[{'to':'codex','text':'Check input'},{'to':'codex','text':'Check input','urgent':True}])
+  self.reply(self.task('codex'));self.reply(self.task('cursor'))
   self.assertEqual(self.hub.db.execute("SELECT COUNT(*) FROM collab_events WHERE kind='question'").fetchone()[0],1)
   pending=self.hub.db.execute("SELECT input FROM collab_tasks WHERE stage='consult'").fetchone()
   self.assertTrue(json.loads(pending['input'])['urgent'])
@@ -272,7 +292,7 @@ class CollaborationTests(unittest.TestCase):
 
  def test_votes_identify_actual_candidate_author_across_revisions(self):
   rid=self.request();self.reply(self.task('codex'),candidate='Original proposal')
-  self.reply(self.task('claude'));self.reply(self.task('cursor'))
+  self.reply(self.task('claude'));self.reply(self.task('cursor'));self.to_review(rid)
   self.reply(self.task('claude'));self.reply(self.task('codex'))
   self.reply(self.task('cursor'),'OBJECT',issues=[{'owner':'claude','question':'Verify constraint'}])
   self.reply(self.task('claude')) # resolve
@@ -280,7 +300,7 @@ class CollaborationTests(unittest.TestCase):
   for a in self.cfg['agents']:self.reply(self.task(a))
   rounds,_=self.c.snapshot(self.hub.scope(self.cfg));r=next(r for r in rounds if r['id']==rid)
   votes=[e['vote'] for e in r['events'] if e['kind']=='review']
-  self.assertEqual([v['proposal_author'] for v in votes if v['version']==1],['codex']*3)
+  self.assertEqual([v['proposal_author'] for v in votes if v['version']==1],['claude']*3)
   self.assertEqual([v['proposal_author'] for v in votes if v['version']==2],['claude']*3)
   self.assertEqual([v['proposal_author'] for v in r['votes']],['claude']*3)
 
@@ -290,5 +310,58 @@ class CollaborationTests(unittest.TestCase):
   rounds,_=self.c.snapshot(self.hub.scope(self.cfg))
   review=next(e for e in rounds[0]['events'] if e['kind']=='review')
   self.assertIsNone(review['vote']['proposal_author'])
+
+ def test_restart_preserves_sealed_opinions_and_reveals_once(self):
+  rid=self.request();self.reply(self.task('claude'),reply='sealed evidence');self.reply(self.task('codex'))
+  self.hub.close();self.hub=Hub(self.temp.name);self.c=self.hub.collaboration
+  self.assertNotIn('sealed evidence',json.dumps(self.c.task_context(self.task('cursor'))))
+  self.reply(self.task('cursor'));self.c.settle_exploration(rid)
+  self.assertEqual(self.hub.db.execute("SELECT count(*) FROM collab_events WHERE kind='opinions_revealed'").fetchone()[0],1)
+  self.assertEqual(len(self.c.task_context(self.task())['independent_opinions']),3)
+
+ def test_failed_independent_submission_never_reveals_other_opinions(self):
+  rid=self.request();self.reply(self.task('claude'),reply='sealed evidence');self.reply(self.task('codex'),reply='')
+  self.assertEqual(self.c.get(rid)['status'],'blocked')
+  self.assertEqual(self.hub.db.execute("SELECT count(*) FROM collab_events WHERE kind IN ('explore','opinions_revealed')").fetchone()[0],0)
+  self.assertIn('codex',self.c.get(rid)['final']);self.assertIn('cursor',self.c.get(rid)['final'])
+
+ def test_old_completed_opinion_result_remains_readable(self):
+  rid=self.request();task=self.task('claude');self.reply(task,reply='historical evidence')
+  self.hub.db.execute("DELETE FROM collab_events WHERE kind='opinions_sealed'")
+  self.assertEqual(self.hub.result(task['id'])['reply'],'historical evidence')
+
+ def test_blocked_result_preserves_draft_and_disagreement(self):
+  rid=self.request();self.to_review(rid)
+  self.reply(self.task('codex'),'OBJECT',issues=[{'owner':'cursor','question':'Unresolved data contradiction'}])
+  self.c.end(rid,'blocked','Limit reached')
+  final=self.c.get(rid)['final'];self.assertIn('Concrete evidence and solution',final)
+  self.assertIn('Unresolved data contradiction',final);self.assertIn('CODEX',final)
+
+
+ def test_no_dispute_skips_all_member_responses_and_hides_empty_gate(self):
+  rid=self.request()
+  for _ in range(3):self.reply(self.task())
+  self.assertIsNone(self.task('codex'));self.assertIsNone(self.task('cursor'))
+  ctx=self.c.task_context(self.task('claude'))
+  self.assertEqual(len(ctx['independent_opinions']),3)
+  self.assertNotIn('explore',[e['kind'] for e in ctx['inbox']])
+  self.reply(self.task('claude'),reply='추가 쟁점 없음',messages=[])
+  self.assertEqual(self.c.get(rid)['stage'],'synthesize')
+  self.assertEqual(self.hub.db.execute("SELECT count(*) FROM collab_events WHERE kind='debate'").fetchone()[0],0)
+  self.to_review(rid)
+  for _ in range(3):self.reply(self.task(),reply='찬성')
+  self.assertEqual(self.c.get(rid)['status'],'agreed')
+  self.assertEqual(self.hub.db.execute("SELECT count(*) FROM collab_tasks WHERE stage IN ('respond','consult')").fetchone()[0],0)
+
+ def test_only_question_recipient_answers_before_synthesis(self):
+  rid=self.request()
+  for _ in range(3):self.reply(self.task())
+  self.reply(self.task('claude'),reply='근거 확인 필요',messages=[{'to':'cursor','text':'측정 근거는 무엇인가?'}])
+  self.assertEqual(self.c.get(rid)['stage'],'debate')
+  self.assertIsNone(self.task('codex'));self.assertIsNone(self.task('claude'))
+  self.assertEqual(self.task('cursor')['stage'],'consult')
+  self.reply(self.task('cursor'),reply='측정 근거와 한계')
+  self.assertEqual(self.c.get(rid)['stage'],'synthesize')
+  self.assertIn('측정 근거와 한계',json.dumps(self.c.task_context(self.task()),ensure_ascii=False))
 
 if __name__=='__main__':unittest.main()

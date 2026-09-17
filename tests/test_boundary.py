@@ -11,10 +11,19 @@ class BoundaryTests(unittest.TestCase):
  task=fixtures.CollaborationTests.task
 
  def running(self):
-  rid=self.request();task=self.task('claude');ctx=self.c.task_context(task)
+  rid=self.request()
+  for _ in range(3):fixtures.CollaborationTests.reply(self,self.task())
+  task=self.task('claude');ctx=self.c.task_context(task)
   self.hub.db.execute("UPDATE collab_tasks SET status='running',input=? WHERE id=?",(json.dumps(ctx),task['id']))
   self.hub.db.execute('UPDATE collab_inbox SET consumed_by=? WHERE round_id=? AND agent=?',(task['id'],rid,'claude'));self.hub.db.commit()
   return rid,task
+
+ def test_independent_phase_never_receives_peer_boundary_messages(self):
+  rid=self.request();task=self.task('claude')
+  self.hub.db.execute("UPDATE collab_tasks SET status='running' WHERE id=?",(task['id'],))
+  self.c.event(rid,'codex','question','Secret peer opinion',['claude']);self.hub.db.commit()
+  self.assertEqual(drain(self.hub.root/'queue.sqlite3',task['id']),[])
+  self.assertNotIn('Secret peer opinion',json.dumps(self.c.task_context(task)))
 
  def late(self,rid,text='Check 21'):
   seq=self.c.event(rid,'codex','question',text,['claude']);self.c.consult(rid,'claude',seq)

@@ -1,4 +1,5 @@
 """Local durable queue and shared state. No product or user paths are hardcoded."""
+from .storage import path as storage_path
 import concurrent.futures
 import hashlib
 import json
@@ -16,8 +17,10 @@ from .collaboration import Collaboration
 class Hub:
     def __init__(self,root):
         self.root=Path(root);self.root.mkdir(parents=True,exist_ok=True)
+        migration=self.root/'config'/'migration.json'
+        self.ui_storage_key=json.loads(migration.read_text(encoding='utf-8')).get('ui_storage_key') if migration.exists() else None
         self.config=Config(root);self.lock=threading.RLock();self.stop=threading.Event()
-        self.db=sqlite3.connect(self.root/'queue.sqlite3',check_same_thread=False)
+        self.db=sqlite3.connect(storage_path(self.root,'queue.sqlite3'),check_same_thread=False)
         self.db.row_factory=sqlite3.Row
         self.db.executescript('''CREATE TABLE IF NOT EXISTS jobs (
             id TEXT PRIMARY KEY, scope TEXT, tid TEXT, agent TEXT, source TEXT, status TEXT,
@@ -28,6 +31,8 @@ class Hub:
         ''')
         self.db.execute("UPDATE jobs SET status='failed',error='Interrupted by restart. Review the run before retrying.' WHERE status='running'")
         self.db.commit()
+        from .channels import Channels
+        self.channels=Channels(self)
         self.threads=[];self.connected=False;self.error=None;self.updated=None
         self.active={};self.pool=concurrent.futures.ThreadPoolExecutor(max_workers=3)
         self.collaboration=Collaboration(self)
@@ -35,7 +40,10 @@ class Hub:
         self.voting=Voting(self)
         from .pipeline import Pipeline
         self.pipeline=Pipeline(self)
+        from .notifications import Notifications
+        self.notifications=Notifications(self)
         self.demo=[];self.revision=0
+        if self.config.value:self.threads=self.archived_threads([],self.config.value)
         self.thread=threading.Thread(target=self.loop,daemon=True)
 
     def start(self):self.thread.start()
@@ -99,9 +107,9 @@ class Hub:
             rounds,collab_jobs=self.collaboration.snapshot(self.scope(self.config.value or {}))
             return {'pipelines':self.pipeline.snapshot(self.scope(self.config.value or {})),'polls':self.voting.snapshot(self.scope(self.config.value or {})),'collaboration':rounds,'collaboration_jobs':collab_jobs,'configured':self.config.value is not None,'config':self.config.public(),
                 'connected':self.connected,'error':self.error,'updated':self.updated,
-                'threads':self.threads,'jobs':[dict(r) for r in self.db.execute(
+                'notifications':self.notifications.snapshot(),'notification_scope':self.scope(self.config.value or {}),'channel_notes':self.channels.notes(),'threads':self.threads,'jobs':[dict(r) for r in self.db.execute(
                     "SELECT id,tid,agent,status,attempt,started,ended,error FROM jobs WHERE scope=? AND status NOT IN ('baseline','observed') ORDER BY rowid DESC LIMIT 80",(self.scope(self.config.value or {}),))],
-                'active':list(self.active),'data_directory':str(self.root)}
+                'ui_storage_key':self.ui_storage_key,'active':list(self.active),'data_directory':str(self.root)}
 
     def new_thread(self,title):
         if not isinstance(title,str) or not title.strip() or len(title)>120:raise ValueError('Thread name must contain 1–120 characters.')
@@ -115,7 +123,7 @@ class Hub:
         receipt=self.peer(cfg['observer'],cfg).tool('coral_create_thread',threadName=title,participantNames=[cfg['observer'],*cfg['agents']])
         tid=receipt['structuredContent']['thread']['id']
         threads=self.peer(cfg['observer'],cfg).threads()
-        with self.lock:self.threads=threads
+        with self.lock:self.threads=self.archived_threads(threads,cfg)
         return tid
 
     def archived_threads(self,threads,cfg):
@@ -125,7 +133,7 @@ class Hub:
             if row['confirmed'] or (current and current.get('state')=='closed'):
                 saved=json.loads(row['snapshot']);saved['state']='closed';saved['archived']=True
                 merged[row['tid']]=saved
-        return list(merged.values())
+        return self.channels.merge(list(merged.values()),cfg)
 
     def close_thread(self,tid,summary):
         if not isinstance(summary,str) or not summary.strip() or len(summary)>2000:
@@ -135,10 +143,15 @@ class Hub:
             if not cfg:raise ValueError('Complete setup first.')
             if any(a['job']['tid']==tid for a in self.active.values()):
                 raise ValueError('이 채널의 실행 중인 작업을 완료하거나 취소한 뒤 닫아 주세요.')
-            peer=self.peer(cfg['observer'],cfg) if cfg['mode']=='coral' else None
+            detached=any(t['threadId']==tid and t.get('detached') for t in self.threads)
+            peer=self.peer(cfg['observer'],cfg) if cfg['mode']=='coral' and not detached else None
             threads=peer.threads() if peer else self.demo
             current=next((t for t in threads if t['threadId']==tid),None)
-            if not current:raise ValueError('Channel not found.')
+            if not current:
+                current=next((t for t in self.threads if t['threadId']==tid and t.get('detached')),None)
+                if not current:raise ValueError('Channel not found.')
+                peer=None
+                threads=list(self.threads)
             if current.get('state')=='closed':raise ValueError('Channel is already closed.')
             saved=dict(current);saved['summary']=summary.strip()
             scope=self.scope(cfg)
@@ -164,7 +177,7 @@ class Hub:
             if not cfg:raise ValueError('Complete setup first.')
             if not isinstance(mentions,list) or any(a not in cfg['agents'] for a in mentions):raise ValueError('Invalid mentions.')
             t=next((t for t in self.threads if t['threadId']==tid),None)
-            if not t or t.get('state')=='closed':raise ValueError('Select an open thread.')
+            if not t or t.get('state')=='closed' or t.get('detached'):raise ValueError('Select a connected open thread.')
             if cfg['mode']=='demo':
                 t['messages'].append({'sendingAgentName':'hub','messageText':text,'messageTimestamp':time.time(),'mentionAgentNames':mentions})
                 for a in mentions:t['messages'].append({'sendingAgentName':a,'messageText':'[데모 응답] 메시지를 수신했습니다. 실제 모델은 호출하지 않았습니다.','messageTimestamp':time.time(),'mentionAgentNames':[]})
@@ -202,7 +215,7 @@ class Hub:
         if not cfg['automatic']:self.observe_pending(cfg)
         baseline=self.db.execute('SELECT 1 FROM baselines WHERE scope=?',(scope,)).fetchone() is None
         for t in threads:
-            if t.get('state')=='closed':continue
+            if t.get('state')=='closed' or t.get('detached'):continue
             for msg in t.get('messages',[]):
                 sender=msg.get('sendingAgentName')
                 if sender not in [cfg['observer'],*cfg['agents']]:continue
@@ -243,7 +256,7 @@ class Hub:
             if not row or row['status'] not in ('failed','cancelled'):raise ValueError('Only failed or cancelled jobs can be retried.')
             if not self.config.value['automatic']:raise ValueError('관찰 모드에서는 재실행할 수 없습니다. 허브 자동 응답을 먼저 켜 주세요.')
             if row['scope']!=self.scope(self.config.value):raise ValueError('This job belongs to different connection settings.')
-            if any(t['threadId']==row['tid'] and t.get('state')=='closed' for t in self.threads):raise ValueError('Channel is closed.')
+            if any(t['threadId']==row['tid'] and (t.get('state')=='closed' or t.get('detached')) for t in self.threads):raise ValueError('Channel is closed.')
             self.db.execute("UPDATE jobs SET status='pending',attempt=attempt+1,error=NULL,result=NULL,started=NULL,ended=NULL WHERE id=?",(key,));self.db.commit()
 
     def result(self,key):
@@ -253,6 +266,8 @@ class Hub:
                 row=self.db.execute('SELECT result FROM pipeline_tasks WHERE id=?',(key,)).fetchone()
                 if not row:raise ValueError('작업을 찾을 수 없습니다.')
                 return json.loads(row['result']) if row['result'] else None
+            task=self.db.execute('SELECT round_id,stage FROM collab_tasks WHERE id=?',(key,)).fetchone()
+            if task and task['stage']=='explore' and self.db.execute("SELECT 1 FROM collab_events WHERE round_id=? AND kind='opinions_sealed'",(task['round_id'],)).fetchone() and not self.db.execute("SELECT 1 FROM collab_events WHERE round_id=? AND kind='opinions_revealed'",(task['round_id'],)).fetchone():return {'reply':'독립 의견 취합 중입니다. 모두 제출한 뒤 공개합니다.'}
             row=self.db.execute('SELECT result FROM collab_tasks WHERE id=?',(key,)).fetchone()
             if row is None:row=self.db.execute('SELECT result FROM jobs WHERE id=?',(key,)).fetchone()
             if not row:raise ValueError('Job not found.')
@@ -307,7 +322,7 @@ class Hub:
             self.active[agent]=active
             def live(proc,a=active):a['process']=proc
             active['future']=self.pool.submit(adapters.execute,agent,dict(cfg),t,
-                json.loads(row['source']).get('messageText',''),self.root/'runs'/row['id']/str(row['attempt']),cancel,live)
+                json.loads(row['source']).get('messageText',''),storage_path(self.root,'runs')/row['id']/str(row['attempt']),cancel,live)
 
     def loop(self):
         while not self.stop.is_set():
@@ -315,10 +330,6 @@ class Hub:
                 cfg=self.config.value;revision=self.revision
             try:
                 if cfg:
-                    with self.lock:
-                        if revision!=self.revision:continue
-                        self.pipeline.tick(cfg)
-                        self.voting.tick(cfg)
                     if cfg['mode']=='demo':
                         with self.lock:
                             if not self.demo:self.seed_demo()
@@ -330,9 +341,17 @@ class Hub:
                         self.threads=threads;self.connected=True;self.error=None;self.updated=time.time()
                         if cfg['mode']=='coral':
                             for t in threads:
+                                if t.get('detached'):
+                                    self.collaboration.close_thread(t['threadId'],self.scope(cfg))
+                                    self.voting.suspend(self.scope(cfg),'채널 연결이 종료되었습니다.',t['threadId'])
+                                    self.pipeline.suspend(self.scope(cfg),'채널 연결이 종료되었습니다.',t['threadId'])
+                            threads=[t for t in threads if not t.get('detached')]
+                            for t in threads:
                                 if t.get('state')=='closed':
                                     self.voting.suspend(self.scope(cfg),'채널이 닫혔습니다.',t['threadId'])
                                     self.pipeline.suspend(self.scope(cfg),'채널이 닫혔습니다.',t['threadId'])
+                            self.pipeline.tick(cfg)
+                            self.voting.tick(cfg)
                             self.collaboration.ingest(threads,cfg);self.collaboration.tick(cfg,threads)
                             self.voting.deliver(cfg,threads)
                             self.pipeline.deliver(cfg,threads)

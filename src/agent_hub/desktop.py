@@ -1,4 +1,5 @@
 """Optional desktop window; all functional UI also runs in a normal browser."""
+from .storage import path as storage_path
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,6 @@ def open_window(url,root):
             edge=Path(os.environ.get(env,fallback))/'Microsoft/Edge/Application/msedge.exe'
             if edge.is_file():
                 subprocess.Popen([str(edge),'--app='+url,'--window-size=1320,900',
-                    '--user-data-dir='+str(root/'window-profile'),'--no-first-run'])
+                    '--user-data-dir='+str(storage_path(root,'window-profile')),'--no-first-run'])
                 return
     webbrowser.open(url)

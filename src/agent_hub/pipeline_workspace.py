@@ -66,6 +66,8 @@ def prepare(source,base,target):
 
 def files(folder):
     root=Path(folder).resolve();names=git(root,'ls-files','--cached','--others','--exclude-standard','-z').decode('utf-8').split('\0')
+    # Keep deleted baseline paths in the fingerprint after Git removes them from the index.
+    names+=git(root,'ls-tree','-r','--name-only','-z','HEAD').decode('utf-8').split('\0')
     found=[]
     for name in sorted(set(n for n in names if n)):
         p=root/name

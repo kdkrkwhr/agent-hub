@@ -1,4 +1,5 @@
 """Model selection and safe metadata. Never read native authentication files."""
+from .storage import path as storage_path
 import json
 import os
 from pathlib import Path
@@ -61,11 +62,11 @@ def cursor_models(text):
 def catalog(root,name):
     if name=='claude':return {'source':'CLI 별칭 · 계정별 사용 가능 여부는 실행 시 확인','options':[{'id':m,'label':m} for m in ('opus','sonnet','haiku')]}
     if name=='codex':
-        cached=read_json(root/'model-catalog.json').get('codex',{})
+        cached=read_json(storage_path(root,'model-catalog.json')).get('codex',{})
         if cached.get('options'):return {**cached,'source':'Codex CLI 조회 목록·기본 모델'}
         data=read_json(Path(os.environ.get('CODEX_HOME',Path.home()/'.codex'))/'models_cache.json')
         return {'source':'Codex 로컬 목록 캐시 · 최신 계정 권한을 보장하지 않음','options':[{'id':m['slug'],'label':str(m.get('display_name') or m['slug'])[:180]} for m in data.get('models',[]) if isinstance(m,dict) and model_id(m.get('slug')) and m.get('visibility','list')!='hide']}
-    data=read_json(root/'model-catalog.json').get('cursor',{})
+    data=read_json(storage_path(root,'model-catalog.json')).get('cursor',{})
     return {'source':'Cursor CLI 조회 목록' if data.get('options') else '목록 새로고침으로 Cursor 계정 모델 조회','options':data.get('options',[]),'updated':data.get('updated')}
 
 def load_cursor(cfg):
@@ -118,7 +119,7 @@ def load_codex(root,cfg):
         proc.stdin.close();proc.stdout.close()
 
 def refresh_catalog(root,cfg):
-    cached=read_json(root/'model-catalog.json');warnings=[]
+    cached=read_json(storage_path(root,'model-catalog.json'));warnings=[]
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         calls={}
         if 'cursor' in cfg.get('agents',[]):calls['cursor']=pool.submit(load_cursor,cfg)
@@ -126,7 +127,7 @@ def refresh_catalog(root,cfg):
         for name,future in calls.items():
             try:cached[name]=future.result()
             except Exception:warnings.append(name.upper()+': 목록 조회 실패 · 기존 목록 유지')
-    atomic_json(root/'model-catalog.json',cached)
+    atomic_json(storage_path(root,'model-catalog.json'),cached)
     return warnings
 
 def info(root,cfg,tasks):
@@ -136,7 +137,7 @@ def info(root,cfg,tasks):
         own=[t for t in tasks if t['agent']==name and t.get('started')]
         own.sort(key=lambda t:t.get('started') or 0,reverse=True)
         for task in own[:20]:
-            folder=root/'runs'/task['id'];record=read_json(folder/'model-info.json')
+            folder=storage_path(root,'runs')/task['id'];record=read_json(folder/'model-info.json')
             actual=observed(name,folder)
             entry={'requested':model_id(record.get('requested')),'native_hint':model_id(record.get('native_hint')),'actual':actual,'started':task['started'],'task':task['id']}
             if task['status']=='running' and running is None:running=entry

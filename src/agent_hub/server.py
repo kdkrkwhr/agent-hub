@@ -32,6 +32,11 @@ def make_server(hub,port):
             path=urlsplit(self.path).path
             if path=='/api/state':return self.reply(200,hub.snapshot())
             if path=='/api/models':return self.reply(200,hub.model_info())
+            if path=='/api/thread/export':
+                from .discussion_export import export_channel
+                try:return self.reply(200,export_channel(hub,parse_qs(urlsplit(self.path).query).get('threadId',[''])[0]))
+                except ValueError as e:return self.reply(404,{'error':str(e)})
+
             if path=='/api/bootstrap':
                 from .adapters import inventory
                 return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.1.0'})
@@ -61,7 +66,15 @@ def make_server(hub,port):
                 elif self.path=='/api/config':result=hub.save(body)
                 elif self.path=='/api/test':result=hub.test_connection(body)
                 elif self.path=='/api/thread':result={'id':hub.new_thread(body.get('name'))}
+                elif self.path=='/api/notifications/read':result=hub.notifications.read(body.get('ids'))
+                elif self.path=='/api/thread/notes':result=hub.channels.save_notes(body.get('threadId'),body)
+                elif self.path=='/api/thread/delete':hub.channels.delete(body.get('threadId'),body.get('confirmed'));result={'ok':True}
+                elif self.path=='/api/thread/continue':result={'id':hub.channels.continue_channel(body.get('threadId'))}
                 elif self.path=='/api/thread/close':hub.close_thread(body.get('threadId'),body.get('summary'));result={'ok':True}
+                elif self.path=='/api/pipeline/publish/preview':
+                    with hub.lock:result=hub.pipeline.publication.preview(body.get('id'))
+                elif self.path=='/api/pipeline/publish':
+                    with hub.lock:result=hub.pipeline.publication.execute(body)
                 elif self.path=='/api/pipeline/commands':
                     from .test_commands import discover
                     result=discover(body.get('source'))

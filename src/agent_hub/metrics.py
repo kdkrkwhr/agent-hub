@@ -1,4 +1,5 @@
 """Measured native invocations and collaboration delivery counters; no cost estimates."""
+from .storage import path as storage_path
 import json
 import time
 import uuid
@@ -55,7 +56,7 @@ def snapshot(db, root, round_, events, now=None):
         records=[];legacy=0;legacy_seconds=0
         for task in own:
             found=[]
-            for file in (Path(root)/'runs'/task['id']).glob('metrics-*.json'):
+            for file in (storage_path(Path(root),'runs')/task['id']).glob('metrics-*.json'):
                 try:found.append(json.loads(file.read_text(encoding='utf-8')))
                 except (OSError,ValueError):continue
             records.extend(found)

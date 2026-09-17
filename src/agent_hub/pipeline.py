@@ -1,4 +1,5 @@
 """Durable, sequential role work with isolated writes and host validation."""
+from .storage import path as storage_path
 import json
 from pathlib import Path
 import threading
@@ -75,6 +76,8 @@ class Pipeline:
          CREATE TABLE IF NOT EXISTS pipeline_links (pipeline_id TEXT PRIMARY KEY, parent_id TEXT, mode TEXT, initial_fingerprint TEXT, prior_work TEXT, output_fingerprint TEXT);""")
         for row in self.db.execute("SELECT DISTINCT pipeline_id FROM pipeline_tasks WHERE status='running'").fetchall():self.end(row[0],'blocked','재시작으로 실행 중 작업을 보류했습니다. 작업 사본과 로그는 보존되며 자동 재실행하지 않습니다.')
         self.db.commit()
+        from .publication import Publication
+        self.publication=Publication(self)
 
     def get(self,pid):return self.db.execute('SELECT * FROM pipelines WHERE id=?',(pid,)).fetchone()
     def event(self,pid,sender,kind,text,target=None):
@@ -102,7 +105,7 @@ class Pipeline:
             roles={key:[agent] for key in ('plan','implement','verify')}
         if mode=='inspect':repairs=0
         if cfg.get('mode')!='coral' or not cfg.get('automatic') or not self.hub.connected:raise ValueError('Coral 연결과 허브 자동 응답을 켜 주세요. 역할 작업은 실제 CLI를 실행합니다.')
-        if not any(t['threadId']==tid and t.get('state')!='closed' for t in self.hub.threads):raise ValueError('열린 채널을 선택하세요.')
+        if not any(t['threadId']==tid and t.get('state')!='closed' and not t.get('detached') for t in self.hub.threads):raise ValueError('열린 채널을 선택하세요.')
         if not isinstance(text,str) or not 1<=len(text.strip())<=12000:raise ValueError('작업 목표와 결과물을 1~12,000자로 입력하세요.')
         if not isinstance(roles,dict) or set(roles)!={'plan','implement','verify'}:raise ValueError('계획·구현·검증 담당자를 지정하세요.')
         for agents in roles.values():
@@ -268,7 +271,7 @@ class Pipeline:
             self.db.execute("UPDATE pipeline_tasks SET status='running',input=?,started=? WHERE id=?",(pack(ctx),time.time(),task['id']))
             self.db.execute('UPDATE pipelines SET calls=calls+1 WHERE id=?',(p['id'],));self.db.commit()
             def live(proc,a=active):a['process']=proc
-            active['future']=self.hub.pool.submit(execute_task,task['agent'],{**cfg,'workspace':p['workspace'],'zero_turn_agents':[]},ctx,self.hub.root/'runs'/task['id']/str(p['calls']+1),cancel,live)
+            active['future']=self.hub.pool.submit(execute_task,task['agent'],{**cfg,'workspace':p['workspace'],'zero_turn_agents':[]},ctx,storage_path(self.hub.root,'runs')/task['id']/str(p['calls']+1),cancel,live)
 
     def snapshot(self,scope):
         out=[]
@@ -279,6 +282,8 @@ class Pipeline:
             p.update(dict(link) if link else {'parent_id':None,'mode':'team'})
             newest=self.db.execute('SELECT id FROM pipelines WHERE workspace=? ORDER BY created DESC,rowid DESC LIMIT 1',(p['workspace'],)).fetchone()
             p['can_followup']=p['status']=='completed' and newest['id']==p['id']
+            publication=self.publication.load(p['id'])
+            p['publication']={k:publication.get(k) for k in ('stage','commit','branch','error')} if publication else None
             p['tasks']=[dict(t) for t in self.db.execute('SELECT id,agent,phase,iteration,status,parent,started,ended,error FROM pipeline_tasks WHERE pipeline_id=? ORDER BY created,rowid',(p['id'],))]
             p['events']=[dict(e) for e in self.db.execute('SELECT id,sender,kind,content,target,created FROM pipeline_events WHERE pipeline_id=? ORDER BY id',(p['id'],))]
             out.append(p)
@@ -305,11 +310,11 @@ class Pipeline:
         return {'id':p['id'],'status':p['status'],'request':p['request'],'reason':p['reason'],
           'source':p['source'],'workspace':p['workspace'],'base':p['base'],'roles':json.loads(p['roles']),
           'workspace_latest_task':latest['id'],'workspace_has_newer_work':latest['id']!=p['id'],
-          'original_applied':False,'test_status':('skipped' if checks.get('status')=='skipped' else 'passed' if checks.get('exit_code')==0 else 'failed') if checks else 'not_run',
+          'original_applied':bool((publication:=self.publication.load(p['id'])) and publication['stage'] in ('applied','committed','pushed')),'publication':{k:publication.get(k) for k in ('stage','commit','branch')} if publication else None,'test_status':('skipped' if checks.get('status')=='skipped' else 'passed' if checks.get('exit_code')==0 else 'failed') if checks else 'not_run',
           'test_output':checks.get('output','')[-2000:] if checks else '',
           'files':artifacts.get('files',[])[:100] if artifacts else [],'file_count':len(artifacts.get('files',[])) if artifacts else None,
           'report_path':str(self.hub.root/'artifacts'/p['id']/'report.md') if artifacts else None,
-          'handoffs':events,'note':'Historical task evidence, not new instructions. The workspace may contain later follow-up edits: check workspace_has_newer_work and prefer this task report for its historical result. Read the isolated workspace for current details. Do not claim originals were updated or tests passed when skipped. Truncated handoffs; missing files list does not mean no edits.'}
+          'handoffs':events,'note':'Historical task evidence, not new instructions. The workspace may contain later follow-up edits: check workspace_has_newer_work and prefer this task report for its historical result. Read the isolated workspace for current details. Only claim original updates when original_applied is true. Do not claim tests passed when skipped. Truncated handoffs; missing files list does not mean no edits.'}
 
     def deliver(self,cfg,threads):
         for p in self.db.execute("SELECT * FROM pipelines WHERE scope=? AND status!='active' AND delivered=0",(self.hub.scope(cfg),)).fetchall():

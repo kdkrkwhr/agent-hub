@@ -1,4 +1,5 @@
 """Explicit registration of one reviewed Codex hook, without trust bypass flags."""
+from .storage import path as storage_path
 import argparse
 import hashlib
 import json
@@ -24,7 +25,7 @@ def definition():
 
 def prepare(root):
     _,setting,fingerprint=definition()
-    try:record=json.loads((Path(root)/'codex-boundary-trust.json').read_text(encoding='utf-8'))
+    try:record=json.loads((storage_path(Path(root),'codex-boundary-trust.json')).read_text(encoding='utf-8'))
     except (OSError,ValueError):return []
     native_home=str(Path(os.environ.get('CODEX_HOME',Path.home()/'.codex')).resolve())
     if record.get('fingerprint')!=fingerprint or record.get('native_home')!=native_home:return []
@@ -61,7 +62,7 @@ def register(root,config):
         hook=matches[0]
         # This explicit setup command trusts only the reviewed native definition/hash.
         rpc(3,'config/value/write',{'keyPath':'hooks.state.'+json.dumps(hook['key'])+'.trusted_hash','value':hook['currentHash'],'mergeStrategy':'replace'})
-        atomic_json(root/'codex-boundary-trust.json',{'fingerprint':fingerprint,'key':hook['key'],'hash':hook['currentHash'],'native_home':str(Path(os.environ.get('CODEX_HOME',Path.home()/'.codex')).resolve())})
+        atomic_json(storage_path(root,'codex-boundary-trust.json'),{'fingerprint':fingerprint,'key':hook['key'],'hash':hook['currentHash'],'native_home':str(Path(os.environ.get('CODEX_HOME',Path.home()/'.codex')).resolve())})
         return {'registered':True,'command':command,'hash':hook['currentHash']}
     finally:
         if proc.poll() is None:proc.terminate()
@@ -74,6 +75,6 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description='Register the reviewed HUB PostToolUse hook in native Codex trust settings.')
     parser.add_argument('--data-dir',type=Path,required=True)
     args=parser.parse_args()
-    try:cfg=json.loads((args.data_dir/'config.json').read_text(encoding='utf-8'))
+    try:cfg=json.loads(storage_path(args.data_dir,'config.json').read_text(encoding='utf-8'))
     except FileNotFoundError:cfg={}
     print(json.dumps(register(args.data_dir,cfg)))

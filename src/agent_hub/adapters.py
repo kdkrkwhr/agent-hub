@@ -1,4 +1,5 @@
 """Native CLI adapters: local user login, read-only analysis, no shell interpolation."""
+from .storage import path as storage_path
 import json
 import os
 from pathlib import Path
@@ -112,19 +113,21 @@ def _execute(name,config,context,incoming,folder,cancel,live):
     if 'pipeline' in context:
         from .pipeline import instructions as pipeline_instructions
         prompt=f'You are {name.upper()}. Follow the host-assigned role. '+pipeline_instructions(context['pipeline'])
+    from .storage import root_for_run
+    data_root=root_for_run(folder)
     env=dict(os.environ);env.update(PYTHONUTF8='1',PYTHONIOENCODING='utf-8')
     cli_command=pipeline_command(name,config,folder,context['pipeline']) if 'pipeline' in context else command(name,config,folder)
     working_directory=context['pipeline']['workspace'] if 'pipeline' in context else folder
     if name=='claude' and 'collaboration' in context and name in config.get('zero_turn_agents',[]):
         from .boundary import prepare
         cli_command+=prepare(config,context,folder)
-        env.update(AGENT_HUB_BOUNDARY_DB=str(folder.parent.parent/'queue.sqlite3'),AGENT_HUB_BOUNDARY_TASK=context['collaboration']['task'])
+        env.update(AGENT_HUB_BOUNDARY_DB=str(storage_path(data_root,'queue.sqlite3')),AGENT_HUB_BOUNDARY_TASK=context['collaboration']['task'])
 
     if name=='codex' and 'collaboration' in context and name in config.get('zero_turn_agents',[]):
         from .codex_boundary import prepare as codex_prepare
-        hook_args=codex_prepare(folder.parent.parent)
+        hook_args=codex_prepare(data_root)
         cli_command+=hook_args
-        if hook_args:env.update(AGENT_HUB_BOUNDARY_DB=str(folder.parent.parent/'queue.sqlite3'),AGENT_HUB_BOUNDARY_TASK=context['collaboration']['task'])
+        if hook_args:env.update(AGENT_HUB_BOUNDARY_DB=str(storage_path(data_root,'queue.sqlite3')),AGENT_HUB_BOUNDARY_TASK=context['collaboration']['task'])
 
     # Do not inspect, copy, or proxy authentication files. Native clients own their auth.
     kwargs={'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {'start_new_session':True}

@@ -41,3 +41,32 @@ test('role workflow uses real task phases and preserves discussion fallback',()=
  assert.equal(view.stateFor('codex').label,'구현 중');assert.equal(view.stateFor('codex').zone,'work');view.snapshot.pipelines[0].tasks=[{agent:'cursor',phase:'verify',status:'running'}];assert.equal(view.stateFor('cursor').zone,'review');
  view.snapshot.pipelines=[];assert.equal(view.stateFor('codex').label,'동료 대기');
 });
+
+
+test('discussion participants wait in the current stage area',()=>{
+ const {view,round}=fixture();round.stage='debate';
+ view.snapshot.jobs=[{agent:'codex',round_id:'r',tid:'channel',status:'pending',stage:'debate'}];
+ assert.equal(view.stateFor('codex').zone,'meeting');
+ view.snapshot.jobs=[];assert.equal(view.stateFor('claude').zone,'meeting');
+ round.stage='review';assert.equal(view.stateFor('claude').zone,'review');
+ round.stage='explore';assert.equal(view.stateFor('claude').zone,'work');
+});
+test('synthesis takes place in its dedicated room and final review has separate coordinates',()=>{
+ const {view}=fixture();view.snapshot.jobs=[{agent:'claude',round_id:'r',tid:'channel',status:'running',stage:'synthesize'}];
+ assert.equal(view.stateFor('claude').zone,'synthesis');view.corridor=300;
+ assert.notDeepEqual(view.target({i:0},'meeting'),view.target({i:0},'review'));
+});
+
+
+test('room routing uses side doors and the central circulation paths',()=>{
+ const {view}=fixture();
+ const work={x:100,y:140,w:360,h:330,side:'right',entry:{x:460,y:324},gate:{x:540,y:324}};
+ const review={x:1100,y:1160,w:450,h:355,side:'left',entry:{x:1100,y:1358},gate:{x:1020,y:1358}};
+ view.mapRooms=new Map([['work-claude',work],['review',review]]);
+ const route=view.mapRoute({x:368,y:324},{x:1190,y:1358});
+ for(const p of [work.entry,work.gate,review.gate,review.entry])assert.ok(route.some(q=>q.x===p.x&&q.y===p.y),'Missing door or corridor');
+ for(let i=1;i<route.length;i++)assert.ok(route[i].x===route[i-1].x||route[i].y===route[i-1].y,'Diagonal wall shortcut');
+ assert.equal(route.at(-1).x,1190);
+ const retarget=view.mapRoute({x:540,y:700},{x:1190,y:1358});
+ for(let i=1;i<retarget.length;i++)assert.ok(retarget[i].x===retarget[i-1].x||retarget[i].y===retarget[i-1].y);
+});

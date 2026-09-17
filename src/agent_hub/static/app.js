@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 let csrf='',boot=null,snapshot=null,selected='',agent='',tab='chat',lastKey='',busy=false;
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
-const officeView=new AgentOffice($('office'),(tid,name)=>{saveFeedPosition();selected=tid;agent=name;tab='chat';lastKey='';render();},openAgentWork);
+const officeView=new AgentOffice($('office'),(tid,name)=>{saveFeedPosition();selected=tid;agent=name;tab='chat';lastKey='';render();},openAgentWork,()=>allMessages().filter(m=>!officeView.selected||m.tid===officeView.selected));
 const when=value=>{const d=new Date(typeof value==='number'?value*1000:value);return Number.isNaN(d.getTime())?'':d.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});};
 const markdown=window.markdownit({html:false,breaks:true,linkify:false,typographer:false});
 // Remote images are labels only: reading a message must not trigger network requests.
@@ -16,7 +16,7 @@ function renderMarkdown(element,text){
  for(const table of element.querySelectorAll('table')){const wrap=node('div','table-scroll');wrap.tabIndex=0;wrap.setAttribute('aria-label','표 가로 스크롤');table.replaceWith(wrap);wrap.append(table);}
  return element;
 }
-async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Hub-CSRF':csrf},body:JSON.stringify(body)});const data=await r.json();if(r.status===404&&path==='/api/thread/close')throw Error('실행 중인 서버가 이전 버전입니다. AGENT HUB 서버를 종료한 뒤 start.cmd로 다시 실행해 주세요. 창 새로고침만으로는 적용되지 않습니다.');if(!r.ok)throw Error(data.error||'요청 실패');return data;}
+async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Hub-CSRF':csrf},body:JSON.stringify(body)});const data=await r.json();if(r.status===404&&['/api/thread/close','/api/thread/delete','/api/thread/continue','/api/thread/notes','/api/notifications/read'].includes(path))throw Error('실행 중인 서버가 이전 버전입니다. AGENT HUB 서버를 종료한 뒤 start.cmd로 다시 실행해 주세요. 창 새로고침만으로는 적용되지 않습니다.');if(!r.ok)throw Error(data.error||'요청 실패');return data;}
 function notify(text){$('notice').textContent=text;$('notice').hidden=!text;}
 function names(){return [...document.querySelectorAll('[data-provider]:checked')].map(e=>e.dataset.provider);}
 function mode(){return document.querySelector('[name=mode]:checked').value;}
@@ -47,7 +47,7 @@ let channelPrefs={},prefsKey='';
 let readKey='',readMarks={},openingChannel=false,serverOffline=false;
 const messageKey=m=>m.eventKey||JSON.stringify([m.messageTimestamp,m.sendingAgentName,m.messageText]);
 function loadReadMarks(){
- const cfg=snapshot.config||{},key='agent-hub-read:'+JSON.stringify([snapshot.data_directory,cfg.mode,cfg.observer,cfg.url_file,cfg.agents]);
+ const cfg=snapshot.config||{},key=snapshot.ui_storage_key||'agent-hub-read:'+JSON.stringify([snapshot.data_directory,cfg.mode,cfg.observer,cfg.url_file,cfg.agents]);
  if(key===readKey)return;readKey=key;readMarks={};prefsKey=key.replace('agent-hub-read:','agent-hub-channels:');channelPrefs={};
  try{const saved=JSON.parse(localStorage.getItem(prefsKey));if(saved&&typeof saved==='object'&&!Array.isArray(saved))channelPrefs=saved;}catch{}
  try{const saved=JSON.parse(localStorage.getItem(key));if(saved&&typeof saved==='object'&&!Array.isArray(saved))readMarks=saved;}catch{}
@@ -108,7 +108,7 @@ function renderParticipants(){
  document.querySelectorAll('[data-mention]').forEach(check=>{const status=check.closest('label').querySelector('.mention-selection');if(status)status.textContent=check.checked?'선택됨':'선택';});
  const hint=$('participant-hint'),t=snapshot?.threads?.find(t=>t.threadId===selected);
  if(!t){hint.textContent='채널을 선택한 뒤 참여할 에이전트를 체크하세요.';return;}
- if(t.state==='closed'){hint.textContent='닫힌 채널 · 읽기 전용';return;}
+ if(t.state==='closed'||t.detached){hint.textContent=t.detached?'보관 채널 · 읽기 전용':'닫힌 채널 · 읽기 전용';return;}
  const picked=[...document.querySelectorAll('[data-mention]:checked')].map(e=>e.dataset.mention);
  if(snapshot.config?.mode==='demo'){hint.textContent='데모 · 실제 에이전트 실행과 승인 없이 화면을 체험합니다.';return;}
  if(!picked.length){hint.textContent='참여자 없음 · 메시지만 전송하며 에이전트를 실행하지 않습니다.';return;}
@@ -156,31 +156,38 @@ function threadMessages(thread){
   if(e.kind==='plan'&&Object.keys(r.assignments).length)text+='\n\n**역할 분담**\n'+Object.entries(r.assignments).map(([a,task])=>`- ${a.toUpperCase()}: ${task}`).join('\n');
   messages.push({sendingAgentName:terminal?r.lead:e.sender,messageText:text,messageTimestamp:e.created,
    mentionAgentNames:['question','issue','notice'].includes(e.kind)?targets:[],eventKey:`collab:${r.id}:${e.id}`,
-   phase:e.kind,vote:e.vote,metrics:terminal?r.metrics:null,requirements:terminal?r.requirements:null,final:terminal,issues:terminal?r.issues:[]});
+   phase:e.kind,vote:e.vote,requirementSources:r.requirements,metrics:terminal?r.metrics:null,requirements:terminal?r.requirements:null,final:terminal,issues:terminal?r.issues:[]});
  }
  messages.push(...pollMessages(thread),...pipelineMessages(thread));
  return messages.filter(m=>!(snapshot.pipelines||[]).some(p=>p.tid===thread.threadId&&m.messageText?.includes(`[PIPELINE-FINAL:${p.id}]`))).filter(m=>!(snapshot.polls||[]).some(p=>p.tid===thread.threadId&&m.messageText?.includes(`[POLL-FINAL:${p.id}]`))).sort((a,b)=>messageTime(a)-messageTime(b));
 }
 function lastActivity(thread){return threadMessages(thread).reduce((latest,m)=>Math.max(latest,messageTime(m)),0);}
 function allMessages(){return(snapshot?.threads||[]).flatMap(t=>threadMessages(t).map((m,i)=>({...m,tid:t.threadId,thread:channelTitle(t),index:i}))).sort((a,b)=>messageTime(a)-messageTime(b)||a.index-b.index);}
-const collaborationLabels={explore:'독립 분석',plan:'역할 분담',execute:'분업 조사',synthesize:'쟁점 조율',review:'교차 검토',resolve:'쟁점 확인',consult:'동료 질문 확인',agreed:'전원 합의',blocked:'합의 보류',cancelled:'취소'};
+const collaborationLabels={explore:'독립 의견 준비',opinions_sealed:'독립 의견 취합',opinions_revealed:'전체 의견 공개',debate:'상호 의견 검토',respond:'반론 답변·의견 수정',plan:'역할 분담',execute:'분업 조사',synthesize:'쟁점 조율',review:'교차 검토',resolve:'쟁점 확인',consult:'동료 질문 확인',agreed:'검토 완료',blocked:'합의 보류',cancelled:'취소'};
+function requirementLabel(id,items=[]){
+ const item=items.find(x=>x.id===id);if(!item)return '검토 항목';
+ const group=items.filter(x=>(x.kind==='question')===(item.kind==='question'));
+ return (item.kind==='question'?'동료 질문 ':'사용자 조건 ')+(group.findIndex(x=>x.id===id)+1);
+}
+function requirementLine(item,text){const p=node('p','',text);p.title='내부 추적 번호: '+item.id;return p;}
 function renderCollaborationStatus(){
  const rounds=(snapshot.collaboration||[]).filter(r=>!selected||r.tid===selected),active=rounds.find(r=>r.status==='active'),bar=$('collab-status');bar.replaceChildren();bar.hidden=!active;
  if(!active)return;
  bar.append(node('span','',`협업 중 · ${collaborationLabels[active.stage]} · V${active.version} · 미해결 쟁점 ${active.issues.filter(i=>i.status!=='resolved').length}개`));
  const stop=node('button','','협업 중지');stop.onclick=async()=>{try{await api('/api/collaboration/cancel',{id:active.id});await pollOnce();}catch(e){notify(e.message);}};bar.append(stop);
- if(active.requirements?.length){const d=node('details','run-metrics');d.append(node('summary','',`고정된 조건 · ${active.requirements.filter(x=>!x.superseded_by).length}개`));for(const x of active.requirements.filter(x=>!x.superseded_by))d.append(node('p','',`${x.id} · ${x.kind==='question'?'동료 질문':'사용자 조건'} — ${x.text}`));bar.append(d);}
+ if(active.stage==='explore'){const progress=active.independent_status||[];bar.append(node('span','',`독립 의견 ${progress.filter(t=>t.status==='done').length}/${active.team.length} 제출 · 전원 제출 전 비공개`));for(const t of progress)bar.append(node('small','',`${t.agent.toUpperCase()}: ${{pending:'대기',running:'작성 중',done:'제출 완료',failed:'실패',cancelled:'중단'}[t.status]||t.status}`));}
+ if(active.requirements?.length){const d=node('details','run-metrics');d.append(node('summary','',`고정된 조건 · ${active.requirements.filter(x=>!x.superseded_by).length}개`));for(const x of active.requirements.filter(x=>!x.superseded_by))d.append(requirementLine(x,`${requirementLabel(x.id,active.requirements)} — ${x.text}`));bar.append(d);}
 }
 function render(){
  if(!snapshot)return;loadReadMarks();
  $('connection').textContent=snapshot.connected?(snapshot.config?.mode==='demo'?'● DEMO':'● LIVE'):'연결 대기';$('connection').classList.toggle('off',!snapshot.connected);
  $('updated').textContent=snapshot.updated?'마지막 수신 '+when(snapshot.updated):'연결 대기 중';
  $('automatic').disabled=snapshot.config?.mode!=='coral';$('automatic').textContent=snapshot.config?.automatic?'허브 자동 응답 켜짐':'관찰 모드';
- const key=JSON.stringify([snapshot.threads,snapshot.jobs,snapshot.collaboration,snapshot.polls,snapshot.pipelines,snapshot.active,snapshot.connected,snapshot.config?.automatic,serverOffline,selected,agent,tab,$('search').value,$('show-closed').checked]);if(key===lastKey)return;lastKey=key;
+ const key=JSON.stringify([snapshot.channel_notes,snapshot.threads,snapshot.jobs,snapshot.collaboration,snapshot.polls,snapshot.pipelines,snapshot.active,snapshot.connected,snapshot.config?.automatic,serverOffline,selected,agent,tab,$('search').value,$('show-closed').checked]);if(key===lastKey)return;lastKey=key;
  const threads=snapshot.threads||[],all=allMessages();if(selected&&!threads.some(t=>t.threadId===selected))selected='';
  const nav=$('threads'),overview=$('overview');nav.replaceChildren();overview.replaceChildren();function channel(id,title,meta){const b=node('button',selected===id?'active':'');b.append(node('strong','',title),node('small','',meta));b.dataset.channel=id;const t=threads.find(t=>t.threadId===id),unread=t?threadMessages(t).length-readCount(t):0;if(unread){const badge=node('span','unread',String(unread));badge.setAttribute('aria-label',`읽지 않은 메시지 ${unread}개`);b.append(badge);}b.onclick=()=>{selected=id;openingChannel=true;lastKey='';render();};b.setAttribute('aria-current',selected===id?'page':'false');(id?nav:overview).append(b);}
  channel('','전체 대화',`${threads.length}개 채널 · ${all.length}개 메시지`);
- threads.filter(t=>$('show-closed').checked||t.state!=='closed').reverse().sort((a,b)=>Number(!!channelPrefs[b.threadId]?.pinned)-Number(!!channelPrefs[a.threadId]?.pinned)||lastActivity(b)-lastActivity(a)).forEach(t=>channel(t.threadId,(channelPrefs[t.threadId]?.pinned?'★ ':'')+(t.state==='closed'?'[닫힘] ':'')+channelTitle(t),`${threadMessages(t).length}개 메시지 · ${(t.participatingAgents||[]).join(' / ')}`));$('channel-count').textContent=threads.length;
+ threads.filter(t=>$('show-closed').checked||t.state!=='closed').reverse().sort((a,b)=>Number(!!channelPrefs[b.threadId]?.pinned)-Number(!!channelPrefs[a.threadId]?.pinned)||lastActivity(b)-lastActivity(a)).forEach(t=>channel(t.threadId,(channelPrefs[t.threadId]?.pinned?'★ ':'')+(t.state==='closed'?'[닫힘] ':t.detached?'[보관] ':'')+channelTitle(t),`${threadMessages(t).length}개 메시지 · ${(t.participatingAgents||[]).join(' / ')}`));$('channel-count').textContent=threads.length;
  $('title').textContent=threads.find(t=>t.threadId===selected)?channelTitle(threads.find(t=>t.threadId===selected)):'전체 대화';
  const scoped=all.filter(m=>!selected||m.tid===selected),filters=$('agents');filters.replaceChildren();
  for(const name of ['',...(snapshot.config?.agents||[])]){const b=node('button',agent===name?'active':'');b.append(node('span',name,name?name.toUpperCase():'ALL AGENTS'),node('strong','',String(scoped.filter(m=>!name||m.sendingAgentName===name).length)),node('small','',name?agentStatus(name)[1]:'메시지'));if(name){b.querySelector('small').dataset.progressAgent=name;b.dataset.status=agentStatus(name)[0];b.title='다음 실행 모델: '+(snapshot.config?.models?.[name]||'CLI 기본값')+' · 이 허브가 실행한 작업 기준입니다. Coral 연결 상태는 공통이며 외부 CLI의 로그인·실행 상태는 확인하지 않습니다.';}b.onclick=()=>{agent=name;lastKey='';render();};filters.append(b);}
@@ -195,13 +202,13 @@ function render(){
   if(m.mentionAgentNames?.length){const recipients=node('div','mention-recipients');recipients.setAttribute('aria-label','멘션 대상');recipients.append(node('span','mention-caption','받는 사람 →'));for(const target of [...new Set(m.mentionAgentNames)]){const chip=node('span','mention-chip','@'+String(target).toUpperCase());chip.dataset.agent=String(target).toLowerCase();recipients.append(chip);}head.append(recipients);}
   if(m.vote){const target=node('span','review-target',`검토 대상 → ${voteTarget(m.vote)}`);target.title='이 검토가 대상으로 삼은 후보안의 작성자와 버전';head.append(target);}
   if(m.pipelinePhase)head.append(node('span','chat-phase',m.pipelinePhase));
-  if(m.phase)head.append(node('span',m.final?'chat-phase final-phase':'chat-phase',m.final?(m.phase==='agreed'?'전원 승인 · 자동 제출':collaborationLabels[m.phase]):(collaborationLabels[m.phase]||{question:'질문',issue:'쟁점',notice:'정보 공유'}[m.phase]||'토론')));
+  if(m.phase)head.append(node('span',m.final?'chat-phase final-phase':'chat-phase',m.final?(m.phase==='agreed'?'검토 완료 · 결과 제출':collaborationLabels[m.phase]):(collaborationLabels[m.phase]||{question:'질문',issue:'쟁점',notice:'정보 공유'}[m.phase]||'토론')));
   const sender=name.toLowerCase(),identity=['claude','codex','cursor','ops','hub'].includes(sender)?sender:'other';
   card.dataset.sender=identity;card.dataset.messageKey=messageKey(m);
   const avatar=node('div','chat-avatar',{claude:'CL',codex:'CX',cursor:'CU',ops:'OP',hub:'나',other:'?'}[identity]);avatar.setAttribute('aria-hidden','true');
   const body=node('div','bubble-body');body.append(head,messageBody(m));
-  if(m.vote?.requirement_checks?.length){const d=node('details','run-metrics');d.append(node('summary','',`조건 검토 근거 · ${m.vote.requirement_checks.length}개`));for(const x of m.vote.requirement_checks)d.append(node('p','',`${x.id} · ${{met:'충족',unmet:'미충족',unclear:'불명확'}[x.status]||x.status} — ${x.evidence}`));body.append(d);}
-  if(m.requirements?.length){const d=node('details','run-metrics');d.append(node('summary','',`조건 원문 · ${m.requirements.filter(x=>!x.superseded_by).length}개 검토 항목`));for(const x of m.requirements)d.append(node('p','',`${x.id} · ${x.source.toUpperCase()} · ${x.kind==='question'?'동료 질문':'사용자 조건'}${x.superseded_by?' · '+x.superseded_by+'로 교체':''} — ${x.text}`));body.append(d);}
+  if(m.vote?.requirement_checks?.length){const d=node('details','run-metrics');d.append(node('summary','',`조건 검토 근거 · ${m.vote.requirement_checks.length}개`));for(const x of m.vote.requirement_checks)d.append(requirementLine(x,`${requirementLabel(x.id,m.requirementSources)} · ${{met:'충족',unmet:'미충족',unclear:'불명확'}[x.status]||x.status} — ${x.evidence}`));body.append(d);}
+  if(m.requirements?.length){const d=node('details','run-metrics');d.append(node('summary','',`조건 원문 · ${m.requirements.filter(x=>!x.superseded_by).length}개 검토 항목`));for(const x of m.requirements)d.append(requirementLine(x,`${requirementLabel(x.id,m.requirements)} · ${x.source.toUpperCase()}${x.superseded_by?' · '+requirementLabel(x.superseded_by,m.requirements)+'로 교체':''} — ${x.text}`));body.append(d);}
   if(m.metrics)body.append(renderMetrics(m.metrics));
   if(m.final&&m.phase==='agreed'){const next=node('button','poll-room-link','이 합의안으로 작업 준비 →');next.onclick=()=>{selected=m.tid||selected;openPipeline(m.messageText);};body.append(next);}
   if(m.issues?.length){const details=node('details','bubble-issues');details.append(node('summary','',`쟁점 ${m.issues.length}개`));for(const i of m.issues){details.append(node('p','',`${i.owner.toUpperCase()} · ${{open:'미해결',investigated:'조사 완료',resolved:'해결'}[i.status]} · ${i.question}`));if(i.resolution)details.append(renderMarkdown(node('div'),i.resolution));}body.append(details);}
@@ -211,10 +218,14 @@ function render(){
  $('feed').hidden=tab!=='chat';$('jobs').hidden=tab!=='jobs';$('composer').hidden=tab!=='chat';$('tab-chat').classList.toggle('active',tab==='chat');$('tab-jobs').classList.toggle('active',tab==='jobs');$('tab-office').classList.toggle('active',tab==='office');$('office').hidden=tab!=='office';document.body.classList.toggle('office-mode',tab==='office');officeView.update(snapshot,selected,serverOffline,tab==='office');
  const picked=[...document.querySelectorAll('[data-mention]:checked')].map(e=>e.dataset.mention);$('mentions').replaceChildren();
  for(const name of snapshot.config?.agents||[]){const label=node('label','inline mention-choice'),check=node('input');label.dataset.agent=name;check.type='checkbox';check.dataset.mention=name;check.checked=picked.includes(name);label.append(check,node('span','','@'+name.toUpperCase()),node('small','mention-selection',check.checked?'선택됨':'선택'));$('mentions').append(label);}
- const current=threads.find(t=>t.threadId===selected),closed=current?.state==='closed';
+ const current=threads.find(t=>t.threadId===selected),closed=current?.state==='closed'||!!current?.detached;
+ renderChannelSummary(current);
+ $('export-discussion').hidden=!current;
  $('rename-thread').hidden=!current;$('pin-thread').hidden=!current;$('pin-thread').textContent=channelPrefs[selected]?.pinned?'★ 고정 해제':'☆ 상단 고정';$('pin-thread').setAttribute('aria-pressed',String(!!channelPrefs[selected]?.pinned));
- $('close-thread').hidden=!current||closed;$('close-thread').disabled=busy;
+ $('delete-thread').hidden=!current||current.state!=='closed';$('continue-thread').hidden=!current?.detached||current.state==='closed';
+ $('close-thread').hidden=!current||current.state==='closed';$('close-thread').disabled=busy;
  $('subtitle').textContent=closed?'닫힌 채널 · 읽기 전용'+(current.summary?' · '+current.summary:''):'';
+ if(current?.detached&&current.state!=='closed')$('subtitle').textContent='이전 세션 기록 · 읽기 전용 · 새 채널로 이어가기를 누르면 최근 대화 10,000자를 전달합니다.';
  $('send').disabled=!selected||closed||busy;$('message').disabled=!selected||closed;
  document.querySelectorAll('[data-mention]').forEach(e=>e.disabled=closed);renderParticipants();
  const activePipeline=(snapshot.pipelines||[]).find(p=>p.tid===selected&&p.status==='active');
@@ -228,7 +239,7 @@ function render(){
  renderPipelinePage();
  document.body.classList.toggle('workflow-mode',tab==='jobs');
 }
-async function pollOnce(){snapshot=await api('/api/state');snapshot.jobs=[...(snapshot.pipelines||[]).flatMap(p=>p.tasks.map(t=>({...t,tid:p.tid,stage:t.phase,pipeline_id:p.id}))),...(snapshot.collaboration_jobs||[]),...snapshot.jobs];serverOffline=false;render();markVisibleRead();if(snapshot.error)notify(snapshot.error);else notify(snapshot.config?.mode==='demo'?'데모 데이터입니다. 실제 모델 호출 없이 화면을 체험할 수 있습니다.':'');}
+async function pollOnce(){snapshot=await api('/api/state');snapshot.jobs=[...(snapshot.pipelines||[]).flatMap(p=>p.tasks.map(t=>({...t,tid:p.tid,stage:t.phase,pipeline_id:p.id}))),...(snapshot.collaboration_jobs||[]),...snapshot.jobs];serverOffline=false;updateNotifications();render();markVisibleRead();if(snapshot.error)notify(snapshot.error);else notify(snapshot.config?.mode==='demo'?'데모 데이터입니다. 실제 모델 호출 없이 화면을 체험할 수 있습니다.':'');}
 async function poll(){try{await pollOnce();}catch(e){serverOffline=true;lastKey='';render();$('connection').textContent='서버 연결 끊김';$('connection').classList.add('off');notify(e.message);}setTimeout(poll,3000);}
 let composingMessage=false,compositionEndedAt=-Infinity;
 $('message').addEventListener('compositionstart',()=>{composingMessage=true;});
@@ -279,7 +290,7 @@ $('close-thread').onclick=()=>{closingId=selected;$('close-summary').value='';$(
 $('cancel-close-channel').onclick=()=>$('close-channel').close();
 $('close-channel-form').onsubmit=async e=>{e.preventDefault();$('confirm-close-channel').disabled=true;try{await api('/api/thread/close',{threadId:closingId,summary:$('close-summary').value});$('close-channel').close();$('show-closed').checked=true;await pollOnce();}catch(err){$('close-error').textContent=err.message;}finally{$('confirm-close-channel').disabled=false;}};
 $('automatic').onclick=async()=>{if(!snapshot.config.automatic&&!confirm('허브가 새 멘션에 직접 응답합니다. 같은 에이전트를 처리하는 외부 실행기가 있다면 먼저 중지해 주세요. 관찰 중인 과거 요청은 실행하지 않습니다. 허브 자동 응답을 켤까요?'))return;try{await api('/api/automatic',{enabled:!snapshot.config.automatic});await pollOnce();}catch(e){notify(e.message);}};
-$('tab-office').onclick=()=>{tab='office';render();};
+$('tab-office').onclick=()=>{if(tab!=='office')$('channel-summary').open=false;tab='office';render();};
 $('tab-chat').onclick=()=>{tab='chat';render();};$('tab-jobs').onclick=()=>{tab='jobs';render();};$('search').oninput=()=>render();$('close-result').onclick=()=>$('result-dialog').close();
 (async()=>{try{boot=await api('/api/bootstrap');csrf=boot.csrf;await pollOnce();if(!boot.config)setup();poll();}catch(e){notify('시작 실패: '+e.message);}})();
 
@@ -301,3 +312,79 @@ function renderMetrics(m){
 initVoting();
 
 initPipeline();
+
+$('delete-thread').onclick=async()=>{const tid=selected;if(!confirm('이 기기의 채널과 보관 대화를 삭제합니다. 다시 불러오지 않습니다. 작업 산출물과 Coral 서버 기록은 삭제하지 않습니다. 계속할까요?'))return;try{await api('/api/thread/delete',{threadId:tid,confirmed:true});selected='';await pollOnce();}catch(e){notify(e.message);}};
+$('continue-thread').onclick=async()=>{if(busy)return;busy=true;$('continue-thread').disabled=true;try{const r=await api('/api/thread/continue',{threadId:selected});selected=r.id;await pollOnce();}catch(e){notify(e.message);}finally{busy=false;$('continue-thread').disabled=false;lastKey='';render();}};
+
+function channelSummary(t){
+ const saved=snapshot.channel_notes?.[t.threadId];if(saved)return {...saved,manual:true};
+ const rounds=(snapshot.collaboration||[]).filter(r=>r.tid===t.threadId).sort((a,b)=>b.created-a.created);
+ const tasks=(snapshot.pipelines||[]).filter(p=>p.tid===t.threadId).sort((a,b)=>b.created-a.created);
+ const latest=[...rounds,...tasks].sort((a,b)=>b.created-a.created)[0];
+ const agreed=rounds.find(r=>r.status==='agreed');
+ const pending=[...rounds,...tasks].filter(r=>r.status==='active'||r.status==='blocked').sort((a,b)=>b.created-a.created);
+ return {goal:(latest?.request||'').slice(0,4000),decisions:(agreed?.final||'').slice(0,4000),remaining:pending.map(r=>(r.status==='blocked'?'확인 필요: ':'진행 중: ')+r.request).join('\n').slice(0,4000),manual:false};
+}
+function renderChannelSummary(t){
+ $('channel-summary').hidden=!t;if(!t)return;const s=channelSummary(t);
+ $('summary-source').textContent=s.manual?'직접 저장 · '+new Date(s.updated*1000).toLocaleString():'요청·합의·작업 기록 기준';
+ for(const key of ['goal','decisions','remaining'])$('summary-'+key).textContent=s[key]||({goal:'아직 등록된 목표가 없습니다.',decisions:'기록된 합의가 없습니다.',remaining:'진행 중이거나 확인이 필요한 작업 기록이 없습니다.'}[key]);
+}
+let summaryThread='';
+$('edit-summary').onclick=()=>{const t=snapshot.threads.find(t=>t.threadId===selected);if(!t)return;summaryThread=t.threadId;const s=channelSummary(t);for(const k of ['goal','decisions','remaining'])$('summary-'+k+'-input').value=s[k];$('summary-error').textContent='';$('summary-dialog').showModal();};
+$('summary-cancel').onclick=()=>$('summary-dialog').close();
+async function saveChannelSummary(reset=false){
+ $('summary-save').disabled=true;$('summary-reset').disabled=true;
+ try{const body={threadId:summaryThread};if(reset)body.reset=true;else for(const k of ['goal','decisions','remaining'])body[k]=$('summary-'+k+'-input').value;
+ await api('/api/thread/notes',body);await pollOnce();$('summary-dialog').close();
+ }catch(e){$('summary-error').textContent=e.message;}finally{$('summary-save').disabled=false;$('summary-reset').disabled=false;}
+}
+$('summary-form').onsubmit=e=>{e.preventDefault();saveChannelSummary();};
+$('summary-reset').onclick=()=>{if(confirm('직접 저장한 요약을 지우고 작업 기록 기준으로 표시할까요?'))saveChannelSummary(true);};
+
+let notificationScope='',notificationSeen=new Set();
+function notificationPref(){try{return localStorage.getItem('hub-desktop-notifications')==='on';}catch{return false;}}
+function renderNotifications(){
+ const items=snapshot?.notifications||[],unread=items.filter(n=>!n.seen).length;
+ $('notification-count').textContent=unread;$('open-notifications').setAttribute('aria-label',`알림 ${unread}개 읽지 않음`);
+ $('read-notifications').disabled=!unread;
+ const supported='Notification' in window;
+ $('desktop-notifications').disabled=!supported||Notification.permission==='denied';
+ $('desktop-notifications').textContent=!supported?'이 브라우저는 데스크톱 알림을 지원하지 않습니다':Notification.permission==='denied'?'브라우저 설정에서 알림 허용 필요':notificationPref()&&Notification.permission==='granted'?'데스크톱 알림 끄기':'데스크톱 알림 켜기';
+ const list=$('notification-list');list.replaceChildren();if(!items.length)list.append(node('p','hint','아직 알림이 없습니다.'));
+ for(const n of items){const card=node('article','notification-item'+(n.seen?'':' notification-unread'));const t=snapshot.threads.find(t=>t.threadId===n.tid);const button=node('button','notification-open');button.append(node('strong','',n.title),node('small','',(t?channelTitle(t):'채널 기록 없음')+' · '+when(n.created)),node('p','',n.body));button.disabled=!t;button.onclick=()=>openNotification(n);card.append(button);if(!n.seen){const read=node('button','notification-read','읽음');read.onclick=()=>readNotifications([n.id]);card.append(read);}list.append(card);}
+}
+async function readNotifications(ids){try{await api('/api/notifications/read',{ids});await pollOnce();}catch(e){$('notification-message').textContent=e.message;}}
+async function openNotification(n){
+ if(!snapshot.threads.some(t=>t.threadId===n.tid))return;
+ saveFeedPosition();selected=n.tid;agent='';tab=n.target==='pipeline'?'jobs':'chat';$('show-closed').checked=true;$('search').value='';lastKey='';openingChannel=true;$('notifications-dialog').close();render();await readNotifications([n.id]);
+}
+function updateNotifications(){
+ const items=snapshot.notifications||[],scope=snapshot.notification_scope||'';
+ if(scope!==notificationScope){notificationScope=scope;notificationSeen=new Set(items.map(n=>n.id));}
+ const fresh=items.filter(n=>!notificationSeen.has(n.id)&&!n.seen);
+ for(const n of items)notificationSeen.add(n.id);
+ if(notificationSeen.size>1000)notificationSeen=new Set(items.map(n=>n.id));
+ if(fresh.length&&notificationPref()&&'Notification' in window&&Notification.permission==='granted'&&(document.hidden||!document.hasFocus())){
+  const n=fresh[0],key='hub-notified:'+scope+':'+n.id;
+  try{if(!localStorage.getItem(key)){localStorage.setItem(key,'1');const toast=new Notification(fresh.length>1?`새 작업 알림 ${fresh.length}개`:n.title,{body:'AGENT HUB에서 결과를 확인하세요.',tag:'agent-hub-activity'});toast.onclick=()=>{window.focus();openNotification(n);toast.close();};}}catch{}
+ }
+ renderNotifications();
+}
+$('open-notifications').onclick=()=>{$('notification-message').textContent='';renderNotifications();$('notifications-dialog').showModal();};
+$('close-notifications').onclick=()=>$('notifications-dialog').close();
+$('read-notifications').onclick=()=>readNotifications((snapshot.notifications||[]).filter(n=>!n.seen).map(n=>n.id));
+$('desktop-notifications').onclick=async()=>{
+ try{if(!('Notification' in window))return;if(notificationPref()&&Notification.permission==='granted'){localStorage.setItem('hub-desktop-notifications','off');}else{const permission=await Notification.requestPermission();localStorage.setItem('hub-desktop-notifications',permission==='granted'?'on':'off');$('notification-message').textContent=permission==='granted'?'이 페이지가 열려 있는 동안 새 작업 알림을 표시합니다.':'데스크톱 알림을 켜지 않았습니다. 알림함은 계속 사용할 수 있습니다.';}renderNotifications();}catch(e){$('notification-message').textContent='브라우저 알림 설정을 확인해 주세요.';}
+};
+
+$('export-discussion').onclick=async()=>{
+ const tid=selected,button=$('export-discussion');if(!tid)return;
+ button.disabled=true;
+ try{
+  const r=await api('/api/thread/export?threadId='+encodeURIComponent(tid));
+  const url=URL.createObjectURL(new Blob([r.markdown],{type:'text/markdown;charset=utf-8'}));
+  const link=document.createElement('a');link.href=url;link.download=r.filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  notify('토론 Markdown 파일 다운로드를 요청했습니다.');
+ }catch(e){notify(e.message);}finally{button.disabled=false;}
+};

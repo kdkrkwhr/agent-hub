@@ -26,6 +26,7 @@ def drain(db_path,task_id):
         db.execute('BEGIN IMMEDIATE')
         task=db.execute("SELECT t.*,r.status AS round_status FROM collab_tasks t JOIN collab_rounds r ON r.id=t.round_id WHERE t.id=?",(task_id,)).fetchone()
         if not task or task['status']!='running' or task['round_status']!='active':return []
+        if task['stage']=='explore':return []
         rows=db.execute("""SELECT e.id,e.sender,e.kind,e.content FROM collab_events e
           JOIN collab_inbox i ON i.event=e.id WHERE i.round_id=? AND i.agent=? AND i.consumed_by IS NULL
           AND e.kind IN ('question','notice','guidance') AND NOT EXISTS
