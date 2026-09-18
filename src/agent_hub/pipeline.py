@@ -5,7 +5,7 @@ from pathlib import Path
 import threading
 import time
 import uuid
-from . import adapters
+from . import adapters, work_types
 from . import pipeline_workspace as ws
 
 PHASES={'prepare':'작업 공간 준비','plan':'계획','implement':'구현','verify':'테스트·검토','consult':'질문 답변','inspect':'개별 질의'}
@@ -14,7 +14,8 @@ def pack(x):return json.dumps(x,ensure_ascii=False)
 
 def instructions(ctx):
     schema={'task':ctx['task'],'status':'done or changes_requested or blocked','reply':'한국어 작업 결과와 근거','messages':[{'to':'assigned agent','text':'necessary concrete question'}]}
-    return ("You are a worker in a user-assigned sequential production pipeline. The host schedules roles. "
+    purpose=work_types.GUIDANCE.get(ctx.get('work_type'),'')
+    return (purpose+' Keep replies concise: result, evidence and unresolved blockers only. '+"You are a worker in a user-assigned sequential production pipeline. The host schedules roles. "
         "Work ONLY in the isolated workspace shown below. Never edit the original repository, commit, "
         "checkout, change Git metadata, push, deploy, install dependencies, contact services or run peers. "
         "Phase plan: inspect source and produce a concrete implementation plan and acceptance criteria; do not edit files. "
@@ -75,11 +76,15 @@ class Pipeline:
          content TEXT, target TEXT, created REAL);
          CREATE TABLE IF NOT EXISTS pipeline_links (pipeline_id TEXT PRIMARY KEY, parent_id TEXT, mode TEXT, initial_fingerprint TEXT, prior_work TEXT, output_fingerprint TEXT);""")
         for row in self.db.execute("SELECT DISTINCT pipeline_id FROM pipeline_tasks WHERE status='running'").fetchall():self.end(row[0],'blocked','재시작으로 실행 중 작업을 보류했습니다. 작업 사본과 로그는 보존되며 자동 재실행하지 않습니다.')
+        self.db.execute("CREATE TABLE IF NOT EXISTS pipeline_work_types (pipeline_id TEXT PRIMARY KEY, selection TEXT, resolved TEXT)")
         self.db.commit()
         from .publication import Publication
         self.publication=Publication(self)
 
     def get(self,pid):return self.db.execute('SELECT * FROM pipelines WHERE id=?',(pid,)).fetchone()
+    def work_type(self,pid):
+        row=self.db.execute('SELECT selection,resolved FROM pipeline_work_types WHERE pipeline_id=?',(pid,)).fetchone()
+        return dict(row) if row else {'selection':'auto','resolved':None}
     def event(self,pid,sender,kind,text,target=None):
         self.db.execute('INSERT INTO pipeline_events VALUES (NULL,?,?,?,?,?,?)',(pid,sender,kind,text,target,time.time()))
     def team(self,p):return list(dict.fromkeys(a for members in json.loads(p['roles']).values() for a in members))
@@ -107,6 +112,8 @@ class Pipeline:
         if cfg.get('mode')!='coral' or not cfg.get('automatic') or not self.hub.connected:raise ValueError('Coral 연결과 허브 자동 응답을 켜 주세요. 역할 작업은 실제 CLI를 실행합니다.')
         if not any(t['threadId']==tid and t.get('state')!='closed' and not t.get('detached') for t in self.hub.threads):raise ValueError('열린 채널을 선택하세요.')
         if not isinstance(text,str) or not 1<=len(text.strip())<=12000:raise ValueError('작업 목표와 결과물을 1~12,000자로 입력하세요.')
+        selection=body.get('workType','auto');work_type=work_types.resolve(selection,text,mode)
+        if work_type=='research' and mode!='inspect':raise ValueError('조사·분석은 읽기 전용 실행 방식을 선택하세요.')
         if not isinstance(roles,dict) or set(roles)!={'plan','implement','verify'}:raise ValueError('계획·구현·검증 담당자를 지정하세요.')
         for agents in roles.values():
             if not isinstance(agents,list) or not 1<=len(agents)<=3 or any(not isinstance(a,str) or a not in cfg['agents'] for a in agents) or len(set(agents))!=len(agents):raise ValueError('각 역할에 연결된 에이전트를 한 명 이상 지정하세요. 동일 역할 내 중복은 허용하지 않습니다.')
@@ -141,6 +148,7 @@ class Pipeline:
         pid='pipe-'+uuid.uuid4().hex;now=time.time();workspace=parent['workspace'] if parent else str((self.hub.root/'workspaces'/pid/'repo').resolve())
         self.db.execute('INSERT INTO pipelines VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,NULL,?,NULL,NULL,NULL,0,0)',(pid,scope,tid,text.strip(),source,project,base,workspace,pack(roles),pack(command),repairs,'prepare','active',now,now+7200))
         self.db.execute('INSERT INTO pipeline_links VALUES (?,?,?,?,?,NULL)',(pid,parent_id,mode,initial,pack(prior_work) if prior_work else None))
+        self.db.execute('INSERT INTO pipeline_work_types VALUES (?,?,?)',(pid,selection,work_type))
         self.event(pid,cfg['observer'],'request',text.strip());self.enqueue(pid,'prepare',[roles['plan'][0]]);self.db.commit();return {'id':pid}
 
     def enqueue(self,pid,phase,agents,parent=None,question=None):
@@ -153,7 +161,7 @@ class Pipeline:
         p=self.get(task['pipeline_id']);prior=json.loads(task['input'] or '{}')
         link=self.db.execute('SELECT * FROM pipeline_links WHERE pipeline_id=?',(p['id'],)).fetchone()
         events=[dict(e) for e in self.db.execute('SELECT sender,kind,content,target FROM pipeline_events WHERE pipeline_id=? ORDER BY id',(p['id'],))]
-        return {'task':task['id'],'phase':task['phase'],'iteration':p['iteration'],'request':p['request'],
+        return {'task':task['id'],'phase':task['phase'],'iteration':p['iteration'],'request':p['request'],'work_type':self.work_type(p['id'])['resolved'],
           'source':p['source'],'base':p['base'],'workspace':p['workspace'],'roles':json.loads(p['roles']),
           'mode':link['mode'] if link else 'team','parent_id':link['parent_id'] if link else None,
           'initial_fingerprint':link['initial_fingerprint'] if link else None,'prior_work':json.loads(link['prior_work']) if link and link['prior_work'] else None,
@@ -277,6 +285,7 @@ class Pipeline:
         out=[]
         for row in self.db.execute('SELECT * FROM pipelines WHERE scope=? ORDER BY created DESC LIMIT 100',(scope,)):
             p={k:row[k] for k in ('id','tid','request','source','base','workspace','max_repairs','iteration','phase','status','created','ended','deadline','reason','calls')}
+            p['work_type']=self.work_type(row['id'])['resolved'];p['work_type_selection']=self.work_type(row['id'])['selection']
             for k in ('roles','command','checks','artifacts'):p[k]=json.loads(row[k]) if row[k] else None
             link=self.db.execute('SELECT parent_id,mode FROM pipeline_links WHERE pipeline_id=?',(p['id'],)).fetchone()
             p.update(dict(link) if link else {'parent_id':None,'mode':'team'})

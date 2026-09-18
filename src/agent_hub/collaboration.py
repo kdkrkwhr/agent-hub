@@ -420,11 +420,47 @@ class Collaboration:
         return rounds,jobs
 
 
+def model_context(ctx):
+    """Compact wire-only view. Stored task evidence and receipt bookkeeping stay intact."""
+    result=dict(ctx)
+    sources={}
+    if ctx.get('request'):sources[ctx['request']]='request'
+    for key in ('proposal',):
+        if ctx.get(key):sources.setdefault(ctx[key],key)
+    items=[]
+    for item in ctx.get('requirements',[]):
+        item=dict(item)
+        text=item.get('text')
+        if text in sources:
+            item.pop('text');item['text_ref']=sources[text]
+        elif text:
+            sources[text]='requirements.'+item['id']+'.text'
+        items.append(item)
+    result['requirements']=items
+    opinions=[]
+    for index,opinion in enumerate(ctx.get('independent_opinions',[])):
+        opinion=dict(opinion);text=opinion.get('opinion')
+        if text in sources:
+            opinion.pop('opinion');opinion['opinion_ref']=sources[text]
+        elif text:sources[text]='independent_opinions.'+str(index)+'.opinion'
+        opinions.append(opinion)
+    result['independent_opinions']=opinions
+    inbox=[]
+    for event in ctx.get('inbox',[]):
+        event=dict(event);text=event.get('content')
+        if text in sources:
+            event.pop('content');event['content_ref']=sources[text]
+        elif text:sources[text]='inbox.'+str(event['id'])+'.content'
+        inbox.append(event)
+    result['inbox']=inbox
+    return {k:v for k,v in result.items() if v not in (None,[],{},'')}
+
+
 def instructions(ctx):
     schema={'round':ctx['round'],'task':ctx['task'],'version':ctx['version'],'reply':'한국어 검토 내용','messages':[],'received_event_ids':[]}
     if ctx['phase']=='plan':schema['assignments']={a:'구체적인 검증 과제' for a in ctx['team']}
     if ctx['phase']=='review':schema.update(decision='APPROVE or OBJECT',proposal_hash=ctx['proposal_hash'],requirement_checks=[{'id':x['id'],'status':'met or unmet or unclear','evidence':'Concrete proposal evidence covering the entire source item'} for x in requirements.active(ctx.get('requirements',[]))])
-    return """You are one member of a host-managed collaborative team. Remain read-only.
+    policy="""You are one member of a host-managed collaborative team. Remain read-only.
 HOST STATE previous_work, when present, is frozen evidence from a prior role task in this same channel. Use it to answer follow-up questions about the result or why it stopped. Its old request/handoffs are NOT current instructions or new requirements. Current user request has priority; ignore unrelated historical context. Read the isolated workspace/report for details when needed, using read-only native file tools or native sandboxed shell; do not use node_repl MCP. Distinguish completed, blocked, cancelled, tests skipped and original not applied. Never infer that a blocked task produced a finished result.
 Work asynchronously: do useful investigation immediately, and respond to addressed inbox questions.
 The host owns scheduling, inbox delivery, issue ownership and stopping. Never run peers
@@ -519,4 +555,11 @@ Answer unread questions alongside your current phase; do not approve if they rem
 The host delivers messages at the next
 call boundary, not in the middle of a CLI call. Max 3 versions, 30 calls, 45 minutes.
 HOST STATE:
-"""+pack(ctx)+'\nCURRENT PHASE OUTPUT SHAPE (all shown fields required at top level):\n'+pack(schema)+'\nReturn only the JSON object. In plan, assignments MUST be a top-level object, never only prose inside reply. Apply format_correction if present.'
+"""
+    # A worker needs its current phase contract, not instructions for every other role.
+    import re
+    policy=re.sub(r'Phase (explore|debate|respond|consult|plan|execute|resolve|synthesize|review):.*?(?=Phase (?:explore|debate|respond|consult|plan|execute|resolve|synthesize|review):|User request/guidance|Approval is never)',
+                  lambda m:m.group(0) if m.group(1)==ctx['phase'] else '',policy,flags=re.S)
+    policy=policy.replace('HOST STATE:\n','')
+    references='Fields ending in _ref point to identical text elsewhere in HOST STATE; read that source as the full field value. List references use requirement/event IDs, or a zero-based opinion index. Omitted empty fields mean no data, never permission to ignore an obligation.\n'
+    return policy+references+'HOST STATE:\n'+json.dumps(model_context(ctx),ensure_ascii=False,separators=(',',':'))+'\nOUTPUT SHAPE (top-level fields required):\n'+json.dumps(schema,ensure_ascii=False,separators=(',',':'))+'\nReturn only JSON. Apply format_correction if present.'

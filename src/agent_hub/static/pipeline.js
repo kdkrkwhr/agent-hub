@@ -1,6 +1,7 @@
 /* Role assignments and artifact views; existing discussion and ballot inputs stay intact. */
 'use strict';
 const pipelineLabels={inspect:'개별 질의',prepare:'준비',plan:'계획',implement:'구현',verify:'테스트·검토',consult:'질문 답변',completed:'작업 완료',blocked:'작업 보류',cancelled:'작업 취소',rework:'수정 재시도'};
+const workTypeLabels={research:'조사·분석',development:'기능 개발',improvement:'수정·개선',documentation:'문서 정리'};
 let pipelineRoles={};const pipelineExpanded=new Set();
 let commandLookup=0;
 function openPipeline(request,options={}){
@@ -9,6 +10,7 @@ function openPipeline(request,options={}){
  const agents=snapshot.config.agents||[];
  $('pipeline-agent').replaceChildren();for(const a of agents){const o=node('option','',a.toUpperCase());o.value=a;$('pipeline-agent').append(o);}$('pipeline-agent').value=options.agent||agents[0]||'';
  $('pipeline-parent').replaceChildren();const fresh=node('option','','새 작업 사본 만들기');fresh.value='';$('pipeline-parent').append(fresh);for(const p of snapshot.pipelines||[]){if(p.tid!==selected||!p.can_followup)continue;const o=node('option','',when(p.ended)+' · '+p.request.slice(0,65));o.value=p.id;$('pipeline-parent').append(o);}
+ $('pipeline-work-type').value=options.workType||'auto';
  $('pipeline-mode').value=options.mode||'team';$('pipeline-parent').value=options.parentId||'';
  pipelineRoles={plan:[agents.includes('claude')?'claude':agents[0]],implement:[agents.includes('codex')?'codex':agents[0]],verify:[agents.includes('cursor')?'cursor':agents[0]]};renderPipelineRoles();tab='jobs';render();$('pipeline-dialog').showModal();$('pipeline-command').value='';updatePipelineMode();updatePipelineTarget();
 }
@@ -46,6 +48,7 @@ function pipelineDisclosure(key,title){const d=node('details','pipeline-details'
 function renderPipelineCard(p,result){
  const card=node('article','poll-card pipeline-card');card.dataset.messageKey=p.id+(result?':end':':start');
  const head=node('div','poll-card-heading');head.append(node('span','eyebrow','ROLE WORKFLOW'),node('time','',when(result?p.ended:p.created)));card.append(head,node('h3','',result?pipelineLabels[p.status]:p.mode==='inspect'?'개별 질문':p.mode==='single'?'개별 작업':'역할 분담 작업'));
+ if(p.work_type)card.append(node('small','',workTypeLabels[p.work_type]+(p.work_type_selection==='auto'?' · 자동 분류':'')));
  if(p.parent_id)card.append(node('small','','후속 작업 · '+p.parent_id));
  if(p.mode==='single')card.append(node('p','hint','한 명이 구현하고 자체 검토합니다. 독립 교차 검토는 포함하지 않습니다.'));
  if(!result){
@@ -90,13 +93,14 @@ function renderPipelinePage(){
 function initPipeline(){
  $('publish-close').onclick=()=>$('publish-dialog').close();$('publish-action').onchange=updatePublicationAction;
  $('publish-form').onsubmit=async e=>{e.preventDefault();if(!publicationPreview)return;$('publish-run').disabled=true;$('publish-close').disabled=true;$('publish-error').textContent='Git 작업 실행 중…';try{const result=await api('/api/pipeline/publish',{id:publicationPreview.id,token:publicationPreview.token,action:$('publish-action').value,message:$('publish-message').value,confirmed:$('publish-confirm').checked});$('publish-error').textContent=({applied:'원본 반영 · 스테이징 완료. 커밋하지 않았습니다.',committed:'커밋 완료. push하지 않았습니다.',pushed:'push 완료.'}[result.stage]||result.stage)+(result.commit?' '+result.commit.slice(0,10):'');publicationPreview=null;await pollOnce();}catch(err){$('publish-error').textContent=err.message+' 창을 닫고 미리보기를 다시 열어 현재 단계를 확인하세요.';publicationPreview=null;}finally{$('publish-close').disabled=false;}};
- $('pipeline-mode').onchange=()=>{updatePipelineMode();if($('pipeline-mode').value==='inspect'){commandLookup++;$('command-suggestions').replaceChildren();}};
+ $('pipeline-work-type').onchange=()=>{if($('pipeline-work-type').value==='research'){$('pipeline-mode').value='inspect';updatePipelineMode();commandLookup++;$('command-suggestions').replaceChildren();}};
+ $('pipeline-mode').onchange=()=>{if($('pipeline-mode').value!=='inspect'&&$('pipeline-work-type').value==='research')$('pipeline-work-type').value='auto';updatePipelineMode();if($('pipeline-mode').value==='inspect'){commandLookup++;$('command-suggestions').replaceChildren();}};
  $('pipeline-parent').onchange=updatePipelineTarget;
  $('detect-commands').onclick=findPipelineCommands;
  $('pipeline-source').addEventListener('input',()=>{commandLookup++;$('command-suggestions').replaceChildren(node('p','hint','저장소가 변경되었습니다. 프로젝트에서 찾기를 눌러 다시 조회하세요.'));});
  $('pipeline-source').addEventListener('change',findPipelineCommands);
  $('new-pipeline').onclick=()=>openPipeline();$('dismiss-pipeline').onclick=()=>$('pipeline-dialog').close();
- $('pipeline-form').onsubmit=async e=>{e.preventDefault();$('start-pipeline').disabled=true;try{await api('/api/pipeline',{threadId:$('pipeline-dialog').dataset.tid,request:$('pipeline-request').value,source:$('pipeline-source').value,roles:pipelineRoles,mode:$('pipeline-mode').value,agent:$('pipeline-agent').value,parentId:$('pipeline-parent').value||null,testCommand:$('pipeline-mode').value==='inspect'?'':$('pipeline-command').value,maxRepairs:Number($('pipeline-repairs').value),authorizeWrites:$('pipeline-authorize').checked});$('pipeline-dialog').close();agent='';$('search').value='';await pollOnce();notify('역할 작업을 시작했습니다. 원본 대신 분리된 작업 사본에서 실행합니다.');}catch(e){$('pipeline-error').textContent=e.message;}finally{$('start-pipeline').disabled=false;}};
+ $('pipeline-form').onsubmit=async e=>{e.preventDefault();$('start-pipeline').disabled=true;try{await api('/api/pipeline',{threadId:$('pipeline-dialog').dataset.tid,request:$('pipeline-request').value,workType:$('pipeline-work-type').value,source:$('pipeline-source').value,roles:pipelineRoles,mode:$('pipeline-mode').value,agent:$('pipeline-agent').value,parentId:$('pipeline-parent').value||null,testCommand:$('pipeline-mode').value==='inspect'?'':$('pipeline-command').value,maxRepairs:Number($('pipeline-repairs').value),authorizeWrites:$('pipeline-authorize').checked});$('pipeline-dialog').close();agent='';$('search').value='';await pollOnce();notify('역할 작업을 시작했습니다. 원본 대신 분리된 작업 사본에서 실행합니다.');}catch(e){$('pipeline-error').textContent=e.message;}finally{$('start-pipeline').disabled=false;}};
 }
 
 let publicationPreview=null;
