@@ -58,7 +58,37 @@ window.AgentOffice=class AgentOffice {
   this.box(g,x+68,y+23,7,7,9,'#e0c9a4','#ab9b83','#c8b28d',35);
   this.box(g,x+28,y+54,27,22,23,'#476777','#2a4557','#37576b');this.box(g,x+28,y+73,27,5,21,'#557b8b','#395667','#426474',20);
  }
- build(names){this.buildMap(names);}
+ build(names){
+  this.mapRooms=null;this.zoneLayers=null;this.camera=null;this.world=null;this.miniDots=null;
+  this.svg.replaceChildren();this.actors.clear();this.rowCount=Math.max(1,Math.ceil(names.length/2));this.workDepth=Math.max(195,this.rowCount*115+35);this.corridor=this.workDepth+35;const depth=this.workDepth+Math.max(215,155+Math.ceil(names.length/3)*35);
+  const height=Math.max(620,92+(620+depth)*.43+90);const left=Math.min(0,520-depth*.87-45);this.svg.setAttribute('viewBox',`${left} 0 ${1120-left} ${height}`);
+  const floor=this.s('g');this.svg.append(floor);
+  this.box(floor,0,0,620,depth,18,'#263948','#101c2a','#182b3a',-18);
+  // Two cutaway walls, glazing and architectural trim.
+  this.box(floor,0,0,620,7,83,'#547081','#263e51','#344e61');this.box(floor,0,7,7,depth-7,83,'#476474','#233b4b','#2b4555');
+  for(let x=30;x<580;x+=100){this.poly(floor,[[x,8,18],[x+76,8,18],[x+76,8,70],[x,8,70]],'#496b80');this.poly(floor,[[x+3,8,22],[x+36,8,22],[x+36,8,66],[x+3,8,66]],'#6d94a8');}
+  for(let y=50;y<depth;y+=110){this.poly(floor,[[8,y,20],[8,y+65,20],[8,y+65,65],[8,y,65]],'#365665');}
+  for(let x=20;x<620;x+=40)this.poly(floor,[[x,9,0],[x+.5,9,0],[x+.5,depth,0],[x,depth,0]],'#2d4252');
+  for(let y=25;y<depth;y+=40)this.poly(floor,[[8,y,0],[620,y,0],[620,y+.5,0],[8,y+.5,0]],'#2d4252');
+  this.box(floor,28,25,280,this.workDepth-20,1,'#324b5a','#324b5a','#324b5a');
+  this.box(floor,382,25,210,this.workDepth-20,1,'#403f58','#403f58','#403f58');
+  this.box(floor,28,this.corridor+30,280,125,1,'#344f4d','#344f4d','#344f4d');
+  this.box(floor,382,this.corridor+30,210,125,1,'#554e45','#554e45','#554e45');
+  this.text(floor,55,42,3,'FOCUS / 공용 연구실','#94b9ca',11);this.text(floor,401,42,3,'DISCUSS / 토론실','#c1b5df',11);
+  this.text(floor,46,this.corridor+46,3,'SYNTHESIS / 조율 · 휴식','#a5cabc',11);this.text(floor,398,this.corridor+46,3,'REVIEW / 검토실','#ddc7a7',11);
+  const items=[];const add=(x,y,draw)=>items.push({depth:x+y,draw});
+  names.forEach((name,i)=>{const x=48+(i%2)*133,y=65+Math.floor(i/2)*115;add(x,y,()=>this.desk(floor,x,y));});
+  // Review table and transparent board.
+  add(422,95,()=>{this.box(floor,435,105,10,60,27);this.box(floor,520,105,10,60,27);this.box(floor,412,90,140,90,5,'#8a82a1','#514f6b','#67617d',27);this.box(floor,410,43,142,5,62,'#8b9da9','#405366','#576c7d',12);this.poly(floor,[[419,49,29],[544,49,29],[544,49,64],[419,49,64]],'#8eb2b6');this.text(floor,429,50,43,'CHECK · AGREE','#234854',10);});
+  const fy=this.corridor+75;
+  add(70,fy,()=>{this.box(floor,50,fy,115,40,22,'#628d88','#345b5c','#456e6b');this.box(floor,50,fy,115,8,18,'#7ba29a','#476e6d','#5c8680',22);this.box(floor,50,fy,10,40,13,'#789c94','#476d67','#5c8278',22);this.box(floor,155,fy,10,40,13,'#789c94','#476d67','#5c8278',22);this.box(floor,185,fy+6,60,44,17,'#b6a58c','#746f65','#928875');});
+  add(430,fy,()=>{this.box(floor,464,fy+10,18,40,26,'#8c847a','#535b5c','#6b7270');this.box(floor,419,fy,128,64,5,'#c4ab87','#877c6b','#ab9479',26);this.box(floor,451,fy+18,28,18,2,'#ddd5bf','#a6a290','#c4bfa7',31);this.box(floor,489,fy+27,7,7,8,'#c7d8d5','#6e918f','#96b4ae',31);});
+  add(280,fy+38,()=>this.plant(floor,280,fy+38));add(590,depth-25,()=>this.plant(floor,590,depth-25));add(335,28,()=>this.plant(floor,335,28));
+  items.sort((a,b)=>a.depth-b.depth).forEach(i=>i.draw());
+  this.text(floor,160,depth+18,-18,'A G E N T   H U B   /   S T U D I O','#5e8298',12);
+  this.actorLayer=this.s('g');this.svg.append(this.actorLayer);
+  names.forEach((name,i)=>this.createActor(name,i));
+ }
  color(name,i){return {claude:'#efb491',codex:'#8edcff',cursor:'#c2aeff'}[name]||['#94d2b5','#e7ca81','#d4a6c3','#99bddf'][i%4];}
  createActor(name,i){
   const color=this.color(name,i),g=this.s('g',{class:'office-actor',role:'button',tabindex:0,'data-agent':name,'aria-label':name.toUpperCase()});
@@ -86,7 +116,7 @@ window.AgentOffice=class AgentOffice {
   return {...base,zone:index<0?'vote-other':'vote-'+index,label:b.choice==='ABSTAIN'?'기권':index>=0?b.choice+'안 선택':b.status==='failed'?'실패':'미응답',description:b.reply||b.error||'마감까지 표를 제출하지 않았습니다.',ballot:b};
  }
  buildVote(names){
-  this.svg.replaceChildren();this.actors.clear();this.corridor=245;this.svg.setAttribute('viewBox','-55 0 1190 750');
+  this.svg.replaceChildren();this.actors.clear();this.corridor=245;this.svg.setAttribute('viewBox','-21 0 1141 694');
   const floor=this.s('g');this.svg.append(floor);this.box(floor,0,0,620,570,18,'#273c4c','#101d2c','#1a2d3c',-18);
   this.box(floor,0,0,620,7,80,'#587789','#2b4558','#3b596b');this.box(floor,0,7,7,563,80,'#4d7181','#293f51','#355464');
   this.text(floor,225,9,36,'INDEPENDENT BALLOT','#a5dfed',19);
@@ -154,7 +184,7 @@ window.AgentOffice=class AgentOffice {
   this.connection.textContent=offline||!snapshot.connected?'● 연결 확인 필요':snapshot.config?.mode==='demo'?'○ DEMO':'● LIVE';
   this.connection.dataset.live=String(!offline&&!!snapshot.connected);
   const t=(snapshot.threads||[]).find(t=>t.threadId===selected);this.caption.textContent=(t?'현재 채널 · '+t.threadName:'전체 채널의 활동')+' / '+names.length+'명의 에이전트';
-  this.root.classList.toggle('voting-room',this.room==='vote');this.root.querySelector('.office-heading h2').textContent=this.room==='vote'?'독립 투표실':'에이전트 캠퍼스';
+  this.root.classList.toggle('voting-room',this.room==='vote');this.root.querySelector('.office-heading h2').textContent=this.room==='vote'?'독립 투표실':'에이전트 스튜디오';
   this.root.querySelector('.office-legend').hidden=this.room==='vote';
   this.root.querySelector('.office-footnote').textContent=this.room==='vote'?'공개 전에는 선택이 숨겨집니다. 공개 후 캐릭터를 선택하면 주장과 근거를 볼 수 있습니다.':'실제 작업 상태를 공간으로 표현합니다. 위치는 시각화이며 캐릭터를 눌러 공유 내용을 확인할 수 있습니다.';
   if(this.room==='vote'){
@@ -176,7 +206,7 @@ window.AgentOffice=class AgentOffice {
    const b=this.el('button','office-person');b.type='button';b.style.setProperty('--person',actor.color);b.append(this.el('span','office-person-dot','●'),this.el('strong','',actor.name.toUpperCase()),this.el('small','',actor.state.label));b.onclick=()=>{this.chosen=actor.name;this.followAgent=actor.name;this.mapFollow=true;this.followMap();this.panelOpen=true;this.details();this.selectActor();this.panel.focus({preventScroll:true});};b.dataset.agent=actor.name;this.roster.append(b);
   }
   if(!names.length)this.caption.textContent='연결 설정에서 에이전트를 선택하면 사무실에 입장합니다.';
-  this.mapControls.hidden=this.room==='vote';this.mini.hidden=this.room==='vote';this.updateZones();this.followMap();this.selectActor();this.details();this.advanceSpeech();this.animate();
+  this.mapControls.hidden=this.room==='vote'||!this.mapRooms;this.mini.toggleAttribute('hidden',this.room==='vote'||!this.mapRooms);this.updateZones();this.followMap();this.selectActor();this.details();this.advanceSpeech();this.animate();
  }
  place(actor){const [x,y]=this.point(actor.position.x,actor.position.y);actor.g.setAttribute('transform',`translate(${x} ${y})`);if(this.speaking?.sendingAgentName===actor.name)this.positionSpeech();this.updateMiniActors();}
  selectActor(){for(const a of this.actors.values())a.g.classList.toggle('selected',a.name===this.chosen);for(const b of this.roster.children)b.setAttribute('aria-pressed',String(b.dataset.agent===this.chosen));}
@@ -212,14 +242,14 @@ window.AgentOffice=class AgentOffice {
   this.mini=this.s('svg',{class:'office-minimap',viewBox:'0 0 2350 1180',role:'img','aria-label':'전체 맵 · 클릭하면 해당 위치로 이동'});this.viewport.append(this.mini);
   this.mini.addEventListener('pointerdown',e=>{const r=this.mini.getBoundingClientRect();this.mapFollow=false;this.camera.x=(e.clientX-r.left)/r.width*this.world.w-this.camera.w/2;this.camera.y=(e.clientY-r.top)/r.height*this.world.h-this.camera.h/2;this.applyCamera();});
   this.svg.setAttribute('tabindex','0');this.svg.setAttribute('aria-label','에이전트 캠퍼스 · 드래그 또는 방향키 이동, 더하기 빼기로 확대 축소');
-  this.svg.addEventListener('wheel',e=>{if(this.room==='vote')return;e.preventDefault();this.mapFollow=false;this.zoomMap(e.deltaY<0?1.12:.89);},{passive:false});
+  this.svg.addEventListener('wheel',e=>{if(!this.camera||this.room==='vote')return;e.preventDefault();this.mapFollow=false;this.zoomMap(e.deltaY<0?1.12:.89);},{passive:false});
   this.svg.addEventListener('pointerdown',e=>{
-   if(this.room==='vote'||e.target.closest('.office-actor')||e.button!==0)return;
+   if(!this.camera||this.room==='vote'||e.target.closest('.office-actor')||e.button!==0)return;
    e.preventDefault();this.mapFollow=false;this.svg.setPointerCapture(e.pointerId);const start={x:e.clientX,y:e.clientY,cx:this.camera.x,cy:this.camera.y},scale=this.svg.getScreenCTM().a;
    const move=ev=>{this.camera.x=start.cx-(ev.clientX-start.x)/scale;this.camera.y=start.cy-(ev.clientY-start.y)/scale;this.applyCamera();};
    const end=()=>{this.svg.removeEventListener('pointermove',move);this.svg.removeEventListener('pointerup',end);this.svg.removeEventListener('pointercancel',end);this.svg.removeEventListener('lostpointercapture',end);};this.svg.addEventListener('pointermove',move);this.svg.addEventListener('pointerup',end);this.svg.addEventListener('pointercancel',end);this.svg.addEventListener('lostpointercapture',end);
   });
-  this.svg.addEventListener('keydown',e=>{if(e.target!==this.svg||this.room==='vote')return;if(['+','=','-'].includes(e.key)){e.preventDefault();this.mapFollow=false;this.zoomMap(e.key==='-'?.8:1.25);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();this.mapFollow=false;this.camera.x+=(e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0)*80;this.camera.y+=(e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0)*80;this.applyCamera();}});
+  this.svg.addEventListener('keydown',e=>{if(!this.camera||e.target!==this.svg||this.room==='vote')return;if(['+','=','-'].includes(e.key)){e.preventDefault();this.mapFollow=false;this.zoomMap(e.key==='-'?.8:1.25);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();this.mapFollow=false;this.camera.x+=(e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0)*80;this.camera.y+=(e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0)*80;this.applyCamera();}});
  }
  mapRect(g,x,y,w,h,fill,extra={}){const r=this.s('rect',{x,y,width:w,height:h,fill,rx:6,...extra});g.append(r);return r;}
  buildMap(names){
@@ -296,7 +326,7 @@ window.AgentOffice=class AgentOffice {
  zoomMap(factor){if(!this.camera)return;const c=this.camera,w=Math.max(650,Math.min(this.world.w,c.w/factor));this.camera=this.cameraAround(c.x+c.w/2,c.y+c.h/2,w);this.applyCamera();}
  focusRoom(id){const r=this.mapRooms?.get(id);if(!r)return;this.camera=this.cameraAround(r.x+r.w/2,r.y+r.h/2,Math.max(800,r.w+350));this.roomJump.value=id;this.applyCamera();}
  followMap(){
-  if(this.room==='vote'||!this.mapFollow||this.offline||!this.snapshot.connected)return;
+  if(!this.mapRooms||this.room==='vote'||!this.mapFollow||this.offline||!this.snapshot.connected)return;
   const actor=this.actors.get(this.followAgent)||[...this.actors.values()].find(a=>a.state?.job)||this.actors.get(this.chosen)||this.actors.values().next().value;
   if(!actor?.position)return;
   const changed=this.followAgent!==actor.name;this.followAgent=actor.name;
@@ -308,7 +338,7 @@ window.AgentOffice=class AgentOffice {
  updateMiniActors(){if(this.room==='vote')return;for(const a of this.actors.values()){if(!a.position)continue;const d=this.miniDots?.get(a.name);if(d){const [x,y]=this.point(a.position.x,a.position.y);d.setAttribute('cx',x);d.setAttribute('cy',y);}}}
  stageZone(stage){if(stage==='synthesize')return 'synthesis';return stage==='review'||stage==='verify'?'review':['debate','respond','consult','resolve'].includes(stage)?'meeting':'work';}
  updateZones(){
-  this.phaseBar.hidden=this.room==='vote';const zones=new Set();
+  this.phaseBar.hidden=false;this.phaseBar.style.visibility=this.room==='vote'?'hidden':'';this.phaseBar.setAttribute('aria-hidden',String(this.room==='vote'));const zones=new Set();
   if(!this.offline&&this.snapshot.connected&&this.snapshot.config?.mode!=='demo'){
    for(const r of this.snapshot.collaboration||[])if(r.status==='active'&&(!this.selected||r.tid===this.selected))zones.add(this.stageZone(r.stage));
    for(const a of this.actors.values())if(a.state.job&&!a.state.unknown)zones.add(a.state.zone);
