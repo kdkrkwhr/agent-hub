@@ -276,8 +276,27 @@ $('settings').onclick=setup;$('close-setup').onclick=()=>$('setup').close();$('s
 document.querySelectorAll('[name=mode]').forEach(e=>e.onchange=connectionFields);$('observer').onchange=connectionFields;
 $('setup-form').onsubmit=async e=>{e.preventDefault();$('save-setup').disabled=true;try{await api('/api/config',formConfig());boot=await api('/api/bootstrap');csrf=boot.csrf;$('setup').close();selected='';lastKey='';await pollOnce();}catch(err){$('setup-status').textContent=err.message;}finally{$('save-setup').disabled=false;}};
 $('test-connection').onclick=async()=>{$('test-connection').disabled=true;$('setup-status').textContent='연결 확인 중…';try{const r=await api('/api/test',formConfig());$('setup-status').textContent=r.message;}catch(e){$('setup-status').textContent=e.message;}finally{$('test-connection').disabled=false;}};
-$('new-thread').onclick=()=>{$('channel-name').value='';$('create-channel').showModal();};$('cancel-channel').onclick=()=>$('create-channel').close();
-$('channel-form').onsubmit=async e=>{e.preventDefault();try{const r=await api('/api/thread',{name:$('channel-name').value});selected=r.id;$('create-channel').close();await pollOnce();}catch(err){notify(err.message);}};
+let creatingChannel=false;
+$('new-thread').onclick=()=>{if(creatingChannel)return;$('channel-name').value='';$('create-channel').showModal();};
+$('cancel-channel').onclick=()=>{if(!creatingChannel)$('create-channel').close();};
+$('create-channel').oncancel=e=>{if(creatingChannel)e.preventDefault();};
+$('channel-form').onsubmit=async e=>{
+ e.preventDefault();
+ if(creatingChannel)return;
+ creatingChannel=true;
+ const form=$('channel-form'),submit=form.querySelector('[type="submit"]'),label=submit.textContent;
+ const controls=[submit,$('cancel-channel'),$('channel-name'),$('new-thread')];
+ controls.forEach(control=>control.disabled=true);
+ submit.textContent='생성 중…';form.setAttribute('aria-busy','true');
+ try{
+  const r=await api('/api/thread',{name:$('channel-name').value});
+  selected=r.id;$('create-channel').close();await pollOnce();
+ }catch(err){notify(err.message);}
+ finally{
+  creatingChannel=false;controls.forEach(control=>control.disabled=false);
+  submit.textContent=label;form.removeAttribute('aria-busy');
+ }
+};
 $('composer').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;$('send').disabled=true;try{await api('/api/message',{threadId:selected,text:$('message').value,mentions:[...document.querySelectorAll('[data-mention]:checked')].map(e=>e.dataset.mention)});$('message').value='';await pollOnce();}catch(err){notify(err.message);}finally{busy=false;$('send').disabled=!selected;}};
 let renamingId='';
 $('rename-thread').onclick=()=>{renamingId=selected;const t=snapshot.threads.find(t=>t.threadId===renamingId);$('rename-name').value=channelTitle(t);$('rename-error').textContent='';$('rename-channel').showModal();$('rename-name').focus();};
