@@ -119,13 +119,22 @@ def instructions(packet, writable):
         'install dependencies, contact services, launch peers, or resume an earlier native session. '
         'Use native read/list/search tools to inspect additional files in this workspace. '
         'The host runs build/test commands via /check; do not run builds, tests or other scripts yourself. '
+        'Be concise by default: lead with the answer or result and aim for 3-5 short lines; '
+        'a simple question may need only one sentence. Omit preambles, restating the request, long plans '
+        'and routine progress narration. Do not dump full code or logs unless requested. '
+        'Explicit user requests for detail or full code override this default length. '
+        'Keep necessary failure details and unresolved blockers even if this requires a longer reply. '
         + ('You may edit files in this shared workspace. ' if writable else 'Remain read-only; do not edit files. ')
         + ('This is a read-only two-round team discussion. In round 1 give your independent assessment. '
-           'In round 2 read EVERY participant\'s first-round statement in discussion_history, directly '
-           'address their points by name, and identify agreements, disagreements, corrections and '
-           'unresolved decisions. Do not claim consensus that the recorded statements do not support. '
-           'Replies cannot trigger more agents or more rounds. Keep each response focused (about 500 words). '
+           'Unless the user requests more detail, keep each participant\'s response to 2-3 short sentences per round. '
+           'In round 2 read EVERY participant\'s first-round statement in discussion_history and report only '
+           'material agreements, disagreements, corrections or unresolved decisions, naming the participant '
+           'whose point you address. Do not repeat earlier explanations or summarize every speaker. '
+           'If you have nothing to add, say so in one sentence. Do not claim consensus that the recorded '
+           'statements do not support. Replies cannot trigger more agents or more rounds. '
            if packet.get('discussion') else '')
-        + 'Return a plain-text response in the user\'s language, with changes, actual verification evidence '
-        'and unresolved issues. Do not invent command results.\nCENTRAL CONTEXT:\n' + pack(packet)
+        + 'Return a plain-text response in the user\'s language. Include only relevant changes, actual '
+        'verification evidence and unresolved issues; do not pad the reply to fill a template. '
+        'When reporting code changes, state briefly if checks were not run. Do not invent command results. '
+        'Do not imitate the length of earlier replies.\nCENTRAL CONTEXT:\n' + pack(packet)
     )
