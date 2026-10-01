@@ -14,11 +14,14 @@ import urllib.request
 import uuid
 
 from .config import data_directory, atomic_json
+from .manual_context import route
 
 HELP = '''@claude / @codex / @cursor [요청]  담당자 전환 또는 실행
+@claude @codex [주제]             동시 의견 → 서로 읽고 재검토 (읽기 전용 2회차)
 멘션 없는 요청                   현재 담당자에게 실행
 /status                         작업 폴더와 최근 턴 확인
 /history                        공통 대화 원문 보기
+/context                        다음 요청에 전달할 대화·도구·코드 용량 확인
 /include 경로 | /exclude 경로   컨텍스트에 포함할 상대 파일 경로
 /compact 요약                   이전 기록 대신 전달할 공통 요약 (원문 보존)
 /sync                           외부 변경·중단 후 파일 상태 확인 및 계속하기
@@ -124,20 +127,60 @@ def tool_label(data):
     return '도구: ' + str(event.get('name') or item.get('type') or event.get('type') or '실행 기록')
 
 
+class DiscussionOutput:
+    def __init__(self):
+        self.pending, self.displayed = {}, {}
+
+    def flush(self, key):
+        text = self.pending.pop(key, '')
+        if text:
+            print(f'[{key[0]}차 · {key[1]}] ' + clean(text), flush=True)
+
+    def feed(self, kind, data):
+        if kind == 'round':
+            title = '각자 의견' if data['round'] == 1 else '서로의 의견을 읽고 재검토'
+            print(f"\n[토론 {data['round']}/2 · {title} · 읽기 전용]", flush=True)
+            return
+        key = (data['round'], data['agent'])
+        if kind == 'text':
+            self.displayed[key] = self.displayed.get(key, '') + data['text']
+            text = self.pending.get(key, '') + data['text']
+            lines = text.split('\n')
+            for line in lines[:-1]:
+                print(f'[{key[0]}차 · {key[1]}] ' + clean(line), flush=True)
+            self.pending[key] = lines[-1]
+            if len(lines[-1]) >= 240:
+                self.flush(key)
+        elif kind == 'tool':
+            self.flush(key)
+            print(f'[{key[0]}차 · {key[1]}] ' + clean(tool_label(data)), flush=True)
+        elif kind == 'speaker':
+            self.flush(key)
+            if data['message'] and data['message'] not in self.displayed.get(key, ''):
+                print(f'[{key[0]}차 · {key[1]}]\n' + clean(data['message']), flush=True)
+            if data['status'] != 'completed':
+                print(f'[{key[0]}차 · {key[1]} · {data["status"]}] ' + clean(data.get('error') or ''), flush=True)
+
+
 def watch(client, sid, key):
     after, displayed, cancelling = 0, '', False
+    discussion = DiscussionOutput()
     while True:
         try:
             turn = client.turn(key, after)
             for event in turn['events']:
                 after = event['seq']
-                if event['kind'] == 'text':
+                if 'round' in event['data']:
+                    discussion.feed(event['kind'], event['data'])
+                elif event['kind'] == 'text':
                     print(clean(event['data']['text']), end='', flush=True)
                     displayed += event['data']['text']
                 elif event['kind'] == 'tool':
                     print('\n[' + clean(tool_label(event['data'])) + ']', flush=True)
             if turn['status'] not in ('pending', 'running') and not turn['more']:
-                if turn['reply'] and turn['reply'] not in displayed:
+                for pending in list(discussion.pending):
+                    discussion.flush(pending)
+                if not turn.get('discussion') and turn['reply'] and turn['reply'] not in displayed:
                     print('\n' + clean(turn['reply']))
                 print('\n[' + turn['status'] + ']' + (' ' + clean(turn['error']) if turn['error'] else ''))
                 return
@@ -178,6 +221,14 @@ def repl(client, session):
                 history = client.request('/api/manual/history?' + urllib.parse.urlencode({'id': sid}))
                 for item in history:
                     print(clean(json.dumps(item, ensure_ascii=False)))
+            elif line == '/context':
+                usage = client.request('/api/manual/context?' + urllib.parse.urlencode({'id': sid}))
+                print(f"현재 컨텍스트 {usage['context_bytes'] / 1024:.1f} / {usage['limit_bytes'] / 1024:.0f}KB (다음 요청 본문 제외)")
+                print(f"대화 {usage['history_bytes'] / 1024:.1f}KB (그중 도구 {usage['tool_bytes'] / 1024:.1f}KB), "
+                      f"코드·diff {usage['snapshot_bytes'] / 1024:.1f}KB, 요약 {usage['summary_bytes'] / 1024:.1f}KB")
+                for file in usage['largest_files']:
+                    print(clean(f"  {file['path']}: {file['bytes'] / 1024:.1f}KB"))
+                print('대화가 크면 /compact 유지할 조건·결정·남은 작업, 파일이 크면 /exclude 상대경로를 사용하세요. 원문은 보존됩니다.')
             elif line == '/cancel':
                 client.request('/api/manual/cancel', {'sessionId': sid})
             elif line.startswith('/') and not line.startswith('/check '):
@@ -190,6 +241,8 @@ def repl(client, session):
                     return
             else:
                 check = line.startswith('/check ')
+                if not check and len(route(line, session['agent'])[0]) > 1 and not client.bootstrap.get('manual_discussions'):
+                    raise RuntimeError('실행 중인 Hub가 동시 토론을 지원하지 않습니다. Hub를 최신 코드로 재시작하세요.')
                 result = client.request('/api/manual/submit', {'sessionId': sid, 'text': line[7:] if check else line,
                                         'kind': 'check' if check else 'chat', 'requestId': uuid.uuid4().hex})
                 if not result.get('switched'):
@@ -209,6 +262,7 @@ def repl(client, session):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='agent-hub chat', description='공통 기록과 작업 사본을 사용하는 수동 에이전트 세션')
     parser.add_argument('--source', type=Path, help='새 세션의 깨끗한 Git 저장소 (기본값: 현재 폴더)')
+    parser.add_argument('--interactive-source', action='store_true', help='새 세션의 프로젝트 경로를 터미널에서 입력')
     parser.add_argument('--resume', help='기존 세션 ID')
     parser.add_argument('--list', action='store_true', help='저장된 세션 목록')
     parser.add_argument('--agent', choices=('claude', 'codex', 'cursor'), default='codex')
@@ -220,6 +274,16 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.resume and (args.source or args.thread or args.read_only):
         parser.error('--resume은 저장된 작업 폴더·채널·권한을 그대로 사용합니다.')
+    if args.interactive_source and not (args.source or args.resume or args.list):
+        try:
+            value = input('작업할 Git 프로젝트 경로 (빈칸: 종료): ').strip()
+        except (EOFError, KeyboardInterrupt):
+            return 0
+        if not value:
+            return 0
+        if len(value) > 1 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        args.source = Path(value)
     try:
         with connection(args) as client:
             if args.list:

@@ -18,17 +18,24 @@ def route(text, current):
     if not isinstance(text, str) or not text.strip() or len(text) > 12000:
         raise ValueError('요청은 1~12,000자로 입력하세요.')
     text = text.strip()
-    if text.startswith('@'):
+    targets = []
+    while text.startswith('@'):
         parts = text.split(maxsplit=1)
-        target, text = parts[0], parts[1] if len(parts) > 1 else ''
-        # Only the leading mention routes a turn. Mentions in its body are data.
-        match = re.fullmatch(r'@(claude|codex|cursor)', target, re.I)
+        # Only consecutive leading mentions route; mentions in prose are data.
+        match = re.fullmatch(r'@(claude|codex|cursor)', parts[0], re.I)
         if not match:
+            if targets:
+                break
             raise ValueError('첫 멘션은 @claude, @codex, @cursor 중 하나여야 합니다.')
-        current = match[1].lower()
-    if current not in ('claude', 'codex', 'cursor'):
+        target = match[1].lower()
+        if target not in targets:
+            targets.append(target)
+        text = parts[1] if len(parts) > 1 else ''
+    if not targets and current not in ('claude', 'codex', 'cursor'):
         raise ValueError('먼저 @claude, @codex 또는 @cursor를 선택하세요.')
-    return current, text.strip()
+    if len(targets) > 1 and not text.strip():
+        raise ValueError('여러 에이전트를 멘션할 때는 함께 토론할 주제를 입력하세요.')
+    return targets or [current], text.strip()
 
 
 def snapshot(session, included):
@@ -68,15 +75,35 @@ def snapshot(session, included):
             'changed_files': changed, 'excluded_files': excluded, 'git_diff': diff}
 
 
-def build(session, history, instruction):
-    packet = {'schema_version': 1, 'session_id': session['id'], 'revision': session['revision'],
+def assemble(session, history, instruction):
+    return {'schema_version': 1, 'session_id': session['id'], 'revision': session['revision'],
               'instruction': instruction, 'context_bucket': {
                   'summary': session['summary'], 'terminal_history': history,
                   'workspace_snapshot': snapshot(session, json.loads(session['included']))}}
-    encoded = pack(packet).encode('utf-8')
+
+
+def build(session, history, instruction):
+    packet = assemble(session, history, instruction)
+    return packet, digest(packet)
+
+
+def usage(session, history):
+    packet = assemble(session, history, '')
+    snap = packet['context_bucket']['workspace_snapshot']
+    size = lambda value: len(pack(value).encode('utf-8'))
+    return {'context_bytes': size(packet), 'limit_bytes': MAX_CONTEXT_BYTES,
+            'history_bytes': size(history), 'tool_bytes': size([h for h in history if 'tool_events' in h]),
+            'snapshot_bytes': size(snap), 'summary_bytes': len(session['summary'].encode('utf-8')),
+            'largest_files': sorted([{'path': n, 'bytes': len(t.encode('utf-8'))} for n, t in snap['active_files'].items()],
+                                    key=lambda f: f['bytes'], reverse=True)[:5]}
+
+
+def digest(packet):
+    encoded = pack({k: v for k, v in packet.items() if k != 'context_hash'}).encode('utf-8')
     if len(encoded) > MAX_CONTEXT_BYTES:
-        raise ValueError('공통 컨텍스트가 192KB를 초과했습니다. /compact 요약 또는 /exclude 파일로 줄이세요. 원문은 보존됩니다.')
-    return packet, hashlib.sha256(encoded).hexdigest()
+        raise ValueError(f'공통 컨텍스트가 {len(encoded) / 1024:.1f}KB로 192KB를 초과했습니다. '
+                         '/context로 용량을 확인하고 /compact 요약 또는 /exclude 파일로 줄이세요. 원문은 보존됩니다.')
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def instructions(packet, writable):
@@ -93,6 +120,12 @@ def instructions(packet, writable):
         'Use native read/list/search tools to inspect additional files in this workspace. '
         'The host runs build/test commands via /check; do not run builds, tests or other scripts yourself. '
         + ('You may edit files in this shared workspace. ' if writable else 'Remain read-only; do not edit files. ')
+        + ('This is a read-only two-round team discussion. In round 1 give your independent assessment. '
+           'In round 2 read EVERY participant\'s first-round statement in discussion_history, directly '
+           'address their points by name, and identify agreements, disagreements, corrections and '
+           'unresolved decisions. Do not claim consensus that the recorded statements do not support. '
+           'Replies cannot trigger more agents or more rounds. Keep each response focused (about 500 words). '
+           if packet.get('discussion') else '')
         + 'Return a plain-text response in the user\'s language, with changes, actual verification evidence '
         'and unresolved issues. Do not invent command results.\nCENTRAL CONTEXT:\n' + pack(packet)
     )

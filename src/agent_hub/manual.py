@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 
-from . import adapters, manual_context as context, manual_runner, pipeline_workspace as ws
+from . import adapters, manual_context as context, manual_discussion, manual_runner, pipeline_workspace as ws
 from .storage import path as storage_path
 
 
@@ -65,6 +65,11 @@ class ManualSessions:
         row = self.db.execute('SELECT id,status FROM manual_turns WHERE session_id=? ORDER BY seq DESC LIMIT 1', (sid,)).fetchone()
         return {**session, 'last_turn': dict(row) if row else None}
 
+    def context_usage(self, sid):
+        session = self.get(sid)
+        self.idle(session)
+        return context.usage(session, self.history(sid, session['summary_until']))
+
     def create(self, body):
         writable = body.get('authorizeWrites', False)
         if type(writable) is not bool:
@@ -111,8 +116,15 @@ class ManualSessions:
         output = []
         for row in self.db.execute('SELECT * FROM manual_turns WHERE session_id=? AND seq>? ORDER BY seq', (sid, after)):
             output.append({'sender': 'Human', 'message': row['request'], 'turn_id': row['id']})
-            output.append({'sender': row['agent'], 'message': row['reply'] or '', 'status': row['status'],
-                           'error': row['error'], 'outcome': json.loads(row['outcome'] or '{}'), 'turn_id': row['id']})
+            if len(json.loads(row['config']).get('participants', [])) > 1:
+                events = self.events(row['id'])
+                for statement in manual_discussion.messages(events, row['status'], row['error']):
+                    output.append({**statement, 'sender': statement['agent'], 'turn_id': row['id']})
+                output.append({'sender': 'Host', 'status': row['status'], 'error': row['error'],
+                               'outcome': json.loads(row['outcome'] or '{}'), 'turn_id': row['id']})
+            else:
+                output.append({'sender': row['agent'], 'message': row['reply'] or '', 'status': row['status'],
+                               'error': row['error'], 'outcome': json.loads(row['outcome'] or '{}'), 'turn_id': row['id']})
             tools = [json.loads(e[0]) for e in self.db.execute("SELECT data FROM manual_events WHERE turn_id=? AND kind='tool' ORDER BY seq", (row['id'],))]
             if tools:
                 output.append({'sender': 'Host', 'tool_events': tools, 'turn_id': row['id']})
@@ -142,7 +154,8 @@ class ManualSessions:
             self.idle(session)
             if session['status'] != 'ready':
                 raise ValueError('세션이 준비되지 않았습니다. 중단된 세션은 /sync로 확인하세요.')
-            agent, request = context.route(text, session['agent']) if kind == 'chat' else (session['agent'], text)
+            participants, request = context.route(text, session['agent']) if kind == 'chat' else ([session['agent']], text)
+            agent = ', '.join(participants)
             if not request and kind == 'chat':
                 self.save(session, agent=agent)
                 self.db.commit()
@@ -153,19 +166,22 @@ class ManualSessions:
             cfg = self.hub.config.value or {}
             frozen = {k: cfg.get(k, {}) for k in ('models', 'executables')}
             frozen['original_text'] = text
+            frozen['participants'] = participants
             if kind == 'check':
                 if not session['writable']:
                     raise ValueError('읽기 전용 세션에서는 검증 명령을 실행하지 않습니다.')
                 frozen['argv'] = ws.command_line(request)
-            elif agent not in frozen['executables'] and not adapters.discover(agent):
-                raise ValueError(agent + ' CLI를 설치하고 로그인한 뒤 다시 요청하세요.')
+            else:
+                for participant in participants:
+                    if participant not in frozen['executables'] and not adapters.discover(participant):
+                        raise ValueError(participant + ' CLI를 설치하고 로그인한 뒤 다시 요청하세요.')
             packet, digest = context.build(session, self.history(sid, session['summary_until']), request)
             packet['context_hash'] = digest
             self.db.execute('''INSERT INTO manual_turns
                 (id,session_id,agent,kind,request,status,input,config,created)
                 VALUES (?,?,?,?,?,'pending',?,?,?)''',
                 (key, sid, agent, kind, request, context.pack(packet), context.pack(frozen), time.time()))
-            self.save(session, status='running', agent=agent)
+            self.save(session, status='running', agent=agent if len(participants) == 1 else session['agent'])
             self.db.commit()
             return {'id': key, 'agent': agent}
 
@@ -174,12 +190,17 @@ class ManualSessions:
             self.db.execute('INSERT INTO manual_events(turn_id,kind,data) VALUES (?,?,?)', (key, kind, context.pack(data)))
             self.db.commit()
 
+    def events(self, key):
+        return [{'kind': e['kind'], 'data': json.loads(e['data'])} for e in
+                self.db.execute('SELECT kind,data FROM manual_events WHERE turn_id=? ORDER BY seq', (key,))]
+
     def turn(self, key, after=0):
         row = self.db.execute('SELECT * FROM manual_turns WHERE id=?', (key,)).fetchone()
         if not row:
             raise ValueError('턴을 찾을 수 없습니다.')
         events = [dict(e) for e in self.db.execute('SELECT * FROM manual_events WHERE turn_id=? AND seq>? ORDER BY seq LIMIT 201', (key, int(after)))]
         return {**{k: row[k] for k in ('id', 'session_id', 'agent', 'status', 'reply', 'error', 'created', 'ended')},
+                'discussion': len(json.loads(row['config']).get('participants', [])) > 1,
                 'outcome': json.loads(row['outcome'] or '{}'), 'more': len(events) > 200,
                 'events': [{**e, 'data': json.loads(e['data'])} for e in events[:200]]}
 
@@ -254,6 +275,8 @@ class ManualSessions:
 
     def run(self, turn, session, cancel, live):
         packet, cfg = json.loads(turn['input']), json.loads(turn['config'])
+        participants = cfg.get('participants', [turn['agent']])
+        discussion = len(participants) > 1
         folder = storage_path(self.hub.root, 'runs') / ('manual-' + turn['id'])
         result, error = {}, None
         try:
@@ -267,6 +290,10 @@ class ManualSessions:
                 result = {'reply': check['output'], 'check': check, 'exit_code': check['exit_code']}
                 if check['exit_code']:
                     error = '검증 명령이 실패했습니다.'
+            elif discussion:
+                result = manual_discussion.execute(participants, cfg, packet, folder, cancel, live,
+                                                   lambda k, d: self.event(turn['id'], k, d))
+                error = result.pop('error', None)
             else:
                 result = manual_runner.execute(turn['agent'], cfg, packet, session['writable'], folder,
                                                cancel, live, lambda k, d: self.event(turn['id'], k, d))
@@ -278,7 +305,7 @@ class ManualSessions:
             fp = ws.fingerprint(session['workspace'], session['base'])
             changed = ws.git(session['workspace'], 'diff', '--no-renames', '--name-only', '-z', 'HEAD').decode('utf-8').split('\0')
             changed += ws.git(session['workspace'], 'ls-files', '--others', '--exclude-standard', '-z').decode('utf-8').split('\0')
-            if not session['writable'] and fp != session['fingerprint']:
+            if (discussion or not session['writable']) and fp != session['fingerprint']:
                 error = '읽기 전용 실행에서 파일 변경이 감지되었습니다. /sync로 확인하세요.'
                 fp = None
         except Exception:
@@ -290,6 +317,8 @@ class ManualSessions:
 
     def collect(self):
         for agent, active in list(self.hub.active.items()):
+            if self.hub.active.get(agent) is not active:
+                continue  # A discussion reserves several providers with the same active job.
             sid = active['job'].get('manual_id')
             if not sid or not active['future'].done():
                 continue
@@ -299,7 +328,10 @@ class ManualSessions:
                 wrapped = {'result': {}, 'error': '작업 종료 처리 실패. /sync로 상태를 확인하세요.', 'fingerprint': None, 'outcome': {}}
             status = 'cancelled' if active['cancel'].is_set() else ('failed' if wrapped['error'] else 'completed')
             reply = wrapped['result'].get('reply', '')
-            if not reply:
+            if not reply and len(active.get('participants', [])) > 1:
+                reply = manual_discussion.transcript(manual_discussion.messages(
+                    self.events(active['job']['id']), status, wrapped['error']))
+            elif not reply:
                 reply = ''.join(json.loads(e[0]).get('text', '') for e in self.db.execute(
                     "SELECT data FROM manual_events WHERE turn_id=? AND kind='text' ORDER BY seq", (active['job']['id'],)))
             self.db.execute('UPDATE manual_turns SET status=?,reply=?,error=?,outcome=?,ended=? WHERE id=?',
@@ -307,7 +339,8 @@ class ManualSessions:
             session = self.get(sid)
             self.save(session, status='ready' if wrapped['fingerprint'] else 'interrupted',
                       fingerprint=wrapped['fingerprint'], revision=session['revision'] + 1)
-            del self.hub.active[agent]
+            for participant in active.get('participants', [agent]):
+                del self.hub.active[participant]
             self.db.commit()
 
     def tick(self):
@@ -315,17 +348,23 @@ class ManualSessions:
         if self.hub.stop.is_set():
             return
         for row in self.db.execute("SELECT * FROM manual_turns WHERE status='pending' ORDER BY seq").fetchall():
-            agent = row['agent']
-            if agent in self.hub.active:
+            participants = json.loads(row['config']).get('participants', [row['agent']])
+            if any(agent in self.hub.active for agent in participants):
                 continue
             session = self.get(row['session_id'])
             cancel = threading.Event()
-            active = {'job': {'id': row['id'], 'manual_id': session['id'], 'tid': session['tid']}, 'cancel': cancel, 'process': None}
+            active = {'job': {'id': row['id'], 'manual_id': session['id'], 'tid': session['tid']},
+                      'participants': participants, 'cancel': cancel, 'process': None, 'processes': {}}
             self.db.execute("UPDATE manual_turns SET status='running' WHERE id=?", (row['id'],))
             self.db.commit()
-            self.hub.active[agent] = active
-            active['future'] = self.hub.pool.submit(self.run, dict(row), session, cancel,
-                                                  lambda proc, a=active: a.update(process=proc))
+            for agent in participants:
+                self.hub.active[agent] = active
+            def live(proc, provider=None, a=active):
+                if provider:
+                    a['processes'][provider] = proc
+                else:
+                    a['process'] = proc
+            active['future'] = self.hub.pool.submit(self.run, dict(row), session, cancel, live)
 
     def loop(self):
         while not self.hub.stop.wait(.15):

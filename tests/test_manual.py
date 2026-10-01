@@ -1,8 +1,10 @@
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -20,13 +22,32 @@ from agent_hub.server import make_server
 
 class ContextTests(unittest.TestCase):
     def test_only_leading_mention_routes_and_empty_mention_switches(self):
-        self.assertEqual(context.route('@cursor 방금 @claude가 수정한 파일 확인', 'codex'), ('cursor', '방금 @claude가 수정한 파일 확인'))
-        self.assertEqual(context.route('@Claude\n새 요청', 'codex'), ('claude', '새 요청'))
-        self.assertEqual(context.route('계속 @cursor 참고', 'codex'), ('codex', '계속 @cursor 참고'))
-        self.assertEqual(context.route('@cursor', 'claude'), ('cursor', ''))
+        self.assertEqual(context.route('@cursor 방금 @claude가 수정한 파일 확인', 'codex'), (['cursor'], '방금 @claude가 수정한 파일 확인'))
+        self.assertEqual(context.route('@Claude\n새 요청', 'codex'), (['claude'], '새 요청'))
+        self.assertEqual(context.route('계속 @cursor 참고', 'codex'), (['codex'], '계속 @cursor 참고'))
+        self.assertEqual(context.route('@cursor', 'claude'), (['cursor'], ''))
         for text in ('@unknown go', '@cursorX go', ''):
             with self.assertRaises(ValueError):
                 context.route(text, 'codex')
+
+    def test_leading_mentions_choose_unique_discussion_participants(self):
+        self.assertEqual(context.route('@Claude @codex @CLAUDE @cursor 토론 @codex 참고', 'cursor'),
+                         (['claude', 'codex', 'cursor'], '토론 @codex 참고'))
+        self.assertEqual(context.route('@claude @codex가 한 말을 검토', 'cursor'), (['claude'], '@codex가 한 말을 검토'))
+        self.assertEqual(context.route('@codex @codex', 'cursor'), (['codex'], ''))
+        with self.assertRaisesRegex(ValueError, '주제'):
+            context.route('@claude @codex', 'cursor')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows launcher')
+    def test_windows_launcher_works_outside_checkout_without_pythonpath(self):
+        launcher = Path(__file__).resolve().parents[1] / 'chat.cmd'
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ)
+            env.pop('PYTHONPATH', None)
+            result = subprocess.run(['cmd.exe', '/d', '/c', str(launcher), '--help'], cwd=tmp,
+                                    env=env, capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'agent-hub chat', result.stdout)
 
     def test_native_commands_use_shared_workspace_fresh_sessions_and_permissions(self):
         packet = {'context_bucket': {'workspace_snapshot': {'current_directory': 'shared'}}}
@@ -83,6 +104,26 @@ class ContextTests(unittest.TestCase):
             watch(client, 'session', 'turn')
         self.assertIn('progress', output.getvalue())
         self.assertIn('final answer', output.getvalue())
+
+    def test_discussion_stream_labels_interleaved_and_final_only_replies(self):
+        from unittest.mock import Mock
+        client = Mock()
+        events = [('round', {'round': 1, 'participants': ['claude', 'codex']}),
+                  ('text', {'round': 1, 'agent': 'claude', 'text': 'claude '}),
+                  ('text', {'round': 1, 'agent': 'codex', 'text': 'codex\n'}),
+                  ('text', {'round': 1, 'agent': 'claude', 'text': 'reply\n'}),
+                  ('speaker', {'round': 1, 'agent': 'claude', 'message': 'claude reply', 'status': 'completed'}),
+                  ('speaker', {'round': 1, 'agent': 'codex', 'message': 'codex', 'status': 'completed'}),
+                  ('speaker', {'round': 2, 'agent': 'claude', 'message': 'final only', 'status': 'completed'})]
+        client.turn.return_value = {'events': [{'seq': i + 1, 'kind': k, 'data': d} for i, (k, d) in enumerate(events)],
+            'discussion': True, 'status': 'completed', 'more': False, 'reply': 'do not duplicate transcript', 'error': None}
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            watch(client, 'session', 'turn')
+        self.assertIn('[1차 · claude] claude reply', output.getvalue())
+        self.assertIn('[1차 · codex] codex', output.getvalue())
+        self.assertEqual(output.getvalue().count('claude reply'), 1)
+        self.assertIn('final only', output.getvalue())
+        self.assertNotIn('do not duplicate', output.getvalue())
 
 
 class ManualTests(unittest.TestCase):
@@ -150,6 +191,135 @@ class ManualTests(unittest.TestCase):
         self.assertEqual(result['outcome']['check']['exit_code'], 0)
         self.assertIn('123', self.m.history(self.sid)[-2]['message'])
 
+    def test_parallel_discussion_shares_both_rounds_and_hands_off_to_one_writer(self):
+        barrier = threading.Barrier(3, timeout=10)
+        packets = {1: [], 2: []}
+        participants = ['claude', 'codex', 'cursor']
+        def discuss(agent, cfg, packet, writable, folder, cancel, live, emit):
+            self.assertFalse(writable)
+            self.assertEqual(set(self.hub.active), set(participants))
+            round_number = packet['discussion']['round']
+            packets[round_number].append(context.pack(packet))
+            self.assertEqual(packet['context_hash'], context.digest(packet))
+            if round_number == 1:
+                self.assertEqual(packet['context_bucket']['discussion_history'], [])
+            else:
+                self.assertEqual([s['agent'] for s in packet['context_bucket']['discussion_history']], participants)
+                self.assertEqual([s['message'] for s in packet['context_bucket']['discussion_history']],
+                                 [a + '-1 @cursor reference' for a in participants])
+            barrier.wait()  # A sequential implementation cannot pass this barrier.
+            emit('text', {'text': f'{agent}-{round_number} @cursor reference'})
+            return {'reply': f'{agent}-{round_number} @cursor reference', 'exit_code': 0}
+        key = self.submit('@claude @codex @cursor discuss')['id']
+        result = self.finish(key, discuss)
+        self.assertEqual(result['status'], 'completed', result['error'])
+        self.assertTrue(result['discussion'])
+        self.assertEqual([len(set(packets[r])) for r in (1, 2)], [1, 1])
+        self.assertFalse(self.hub.active)
+        self.assertEqual(self.m.get(self.sid)['revision'], 1)
+        self.assertEqual(self.m.get(self.sid)['agent'], 'codex')
+        history = [h for h in self.m.history(self.sid) if h.get('round')]
+        self.assertEqual(len(history), 6)
+        self.assertEqual({h['sender'] for h in history}, set(participants))
+        def implement(agent, cfg, packet, writable, *args):
+            self.assertEqual(agent, 'cursor')
+            self.assertTrue(writable)
+            self.assertEqual(len([h for h in packet['context_bucket']['terminal_history'] if h.get('round')]), 6)
+            return {'reply': 'implemented', 'exit_code': 0}
+        self.assertEqual(self.finish(self.submit('@cursor implement the discussion')['id'], implement)['status'], 'completed')
+
+    def test_discussion_waits_for_all_provider_slots_and_cancels_every_speaker(self):
+        from concurrent.futures import Future
+        outside = {'job': {}, 'future': Future(), 'cancel': threading.Event()}
+        self.hub.active['codex'] = outside
+        key = self.submit('@claude @codex discuss')['id']
+        with self.hub.lock:
+            self.m.tick()
+        self.assertEqual(self.m.turn(key)['status'], 'pending')
+        self.assertEqual(self.hub.active, {'codex': outside})
+        del self.hub.active['codex']
+        ready = threading.Barrier(3, timeout=10)
+        ended = []
+        def running(agent, cfg, packet, writable, folder, cancel, live, emit):
+            emit('text', {'text': agent + ' partial'})
+            ready.wait()
+            cancel.wait(10)
+            ended.append(agent)
+            raise RuntimeError('cancelled speaker')
+        with patch('agent_hub.manual_runner.execute', side_effect=running):
+            with self.hub.lock:
+                self.m.tick()
+            ready.wait()
+            self.assertEqual(set(self.hub.active), {'claude', 'codex'})
+            with self.assertRaises(ValueError):
+                self.submit('@cursor cannot overlap')
+            self.m.cancel(self.sid)
+            result = self.finish(key, running)
+        self.assertEqual(result['status'], 'cancelled')
+        self.assertEqual(set(ended), {'claude', 'codex'})
+        self.assertFalse(self.hub.active)
+        self.assertIn('claude partial', result['reply'])
+        self.assertIn('codex partial', result['reply'])
+
+    def test_failed_speaker_stops_next_round_but_preserves_other_opinions(self):
+        calls = []
+        def failing(agent, cfg, packet, writable, folder, cancel, live, emit):
+            calls.append((agent, packet['discussion']['round']))
+            if agent == 'claude':
+                emit('text', {'text': 'partial opinion'})
+                raise RuntimeError('fixture failure')
+            return {'reply': 'complete opinion', 'exit_code': 0}
+        result = self.finish(self.submit('@claude @codex discuss')['id'], failing)
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(set(calls), {('claude', 1), ('codex', 1)})
+        history = self.m.history(self.sid)
+        self.assertIn('partial opinion', context.pack(history))
+        self.assertIn('complete opinion', context.pack(history))
+        self.assertIn('fixture failure', context.pack(history))
+        self.assertEqual(self.m.get(self.sid)['status'], 'ready')
+
+    def test_discussion_context_overflow_stops_before_second_round(self):
+        calls = []
+        def large(agent, cfg, packet, *args):
+            calls.append(packet['discussion']['round'])
+            return {'reply': agent + 'x' * 100000, 'exit_code': 0}
+        result = self.finish(self.submit('@claude @codex discuss')['id'], large)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('192KB', result['error'])
+        self.assertEqual(calls, [1, 1])
+        self.assertGreater(len(context.pack(self.m.history(self.sid))), 200000)
+
+    def test_discussion_workspace_mutation_blocks_next_round_and_requires_sync(self):
+        calls = []
+        def mutate(agent, cfg, packet, writable, *args):
+            self.assertFalse(writable)
+            calls.append(packet['discussion']['round'])
+            if agent == 'claude':
+                (self.workspace / 'app.py').write_text('unexpected = True\n')
+            return {'reply': 'opinion', 'exit_code': 0}
+        result = self.finish(self.submit('@claude @codex discuss')['id'], mutate)
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(calls, [1, 1])
+        self.assertEqual(self.m.get(self.sid)['status'], 'interrupted')
+        self.assertIn('/sync', result['error'])
+
+    def test_restart_keeps_attributed_partial_discussion_without_repeating(self):
+        key = self.submit('@claude @codex discuss')['id']
+        self.m.db.execute("UPDATE manual_turns SET status='running' WHERE id=?", (key,))
+        self.m.event(key, 'text', {'agent': 'claude', 'round': 1, 'text': 'unfinished'})
+        self.m.event(key, 'speaker', {'agent': 'codex', 'round': 1, 'message': 'finished', 'status': 'completed', 'error': None})
+        self.hub.close()
+        self.hub = Hub(self.root / 'hub')
+        self.m = self.hub.manual
+        statements = {h['sender']: h for h in self.m.history(self.sid) if h.get('round')}
+        self.assertEqual(statements['claude']['message'], 'unfinished')
+        self.assertEqual(statements['claude']['status'], 'interrupted')
+        self.assertEqual(statements['codex']['message'], 'finished')
+        with patch('agent_hub.manual_runner.execute') as native:
+            self.m.tick()
+            native.assert_not_called()
+        self.assertEqual(self.m.turn(key)['status'], 'interrupted')
+
     def test_failed_cancelled_and_restarted_turns_keep_actual_changes(self):
         def fail(agent, cfg, packet, writable, folder, cancel, live, emit):
             (self.workspace / 'partial.py').write_text('partial = True\n')
@@ -211,6 +381,21 @@ class ManualTests(unittest.TestCase):
         self.assertEqual(packet['context_bucket']['terminal_history'], [])
         self.assertIn('External edit', packet['context_bucket']['summary'])
         self.m.cancel(self.sid)
+
+    def test_context_usage_explains_tool_size_and_compaction_keeps_original(self):
+        def tools(agent, cfg, packet, writable, folder, cancel, live, emit):
+            emit('tool', {'event': {'output': 'x' * 15000}})
+            return {'reply': 'reviewed without changes', 'exit_code': 0}
+        self.finish(self.submit('@claude inspect')['id'], tools)
+        before = self.m.context_usage(self.sid)
+        self.assertGreater(before['tool_bytes'], 15000)
+        self.assertGreater(before['context_bytes'], before['tool_bytes'])
+        original = self.m.history(self.sid)
+        self.m.manage({'sessionId': self.sid, 'action': 'compact', 'text': 'Reviewed; no changes; tests not run.'})
+        after = self.m.context_usage(self.sid)
+        self.assertLess(after['context_bytes'], before['context_bytes'])
+        self.assertLess(after['tool_bytes'], 10)
+        self.assertEqual(original, self.m.history(self.sid))
 
     def test_idempotency_busy_project_and_no_autonomous_collaboration(self):
         key = '12345678-1234-1234-1234-123456789abc'
@@ -308,6 +493,9 @@ class ManualTests(unittest.TestCase):
         base = 'http://127.0.0.1:' + str(server.server_port)
         try:
             client = Client(base)
+            self.assertTrue(client.bootstrap['manual_discussions'])
+            usage = client.request('/api/manual/context?id=' + self.sid)
+            self.assertEqual(usage['limit_bytes'], context.MAX_CONTEXT_BYTES)
             self.assertEqual(client.session(self.sid)['workspace'], str(self.workspace))
             request = urllib.request.Request(base + '/api/manual/manage', data=json.dumps({'sessionId': self.sid, 'action': 'close'}).encode(), headers={'Content-Type': 'application/json'})
             with self.assertRaises(urllib.error.HTTPError) as error:
@@ -339,6 +527,10 @@ class ManualTests(unittest.TestCase):
             with patch('builtins.input', side_effect=['/history', '/exit']), patch('sys.stdout', new_callable=io.StringIO), \
                  patch('agent_hub.manual_runner.execute') as native:
                 self.assertEqual(cli_main(argv), 0)
+                native.assert_not_called()
+            with patch('builtins.input', side_effect=['"' + str(self.source) + '"', '/exit']), \
+                 patch('sys.stdout', new_callable=io.StringIO), patch('agent_hub.manual_runner.execute') as native:
+                self.assertEqual(cli_main(['--interactive-source', '--data-dir', str(self.root / 'hub'), '--port', str(port)]), 0)
                 native.assert_not_called()
         finally:
             self.hub = Hub(self.root / 'hub')

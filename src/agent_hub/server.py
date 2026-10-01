@@ -39,6 +39,7 @@ def make_server(hub,port):
                         if path=='/api/manual/sessions':result=hub.manual.list()
                         elif path=='/api/manual/session':result=hub.manual.status(key)
                         elif path=='/api/manual/history':result=hub.manual.history(key)
+                        elif path=='/api/manual/context':result=hub.manual.context_usage(key)
                         elif path=='/api/manual/turn':result=hub.manual.turn(key,int(query.get('after',['0'])[0]))
                         else:raise ValueError('Unknown manual endpoint.')
                     return self.reply(200,result)
@@ -50,7 +51,7 @@ def make_server(hub,port):
 
             if path=='/api/bootstrap':
                 from .adapters import inventory
-                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0','manual_sessions':True,'data_directory':str(hub.root.resolve())})
+                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0','manual_sessions':True,'manual_discussions':True,'data_directory':str(hub.root.resolve())})
             if path=='/api/pipeline/artifact':
                 try:
                     query=parse_qs(urlsplit(self.path).query)
