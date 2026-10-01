@@ -112,6 +112,7 @@ class Collaboration:
                 if self.db.execute('SELECT 1 FROM collab_seen WHERE scope=? AND key=?',(scope,key)).fetchone():continue
                 self.db.execute('INSERT INTO collab_seen VALUES (?,?)',(scope,key))
                 if baseline or not cfg['automatic']:continue
+                if hasattr(self.hub,'manual') and self.hub.manual.owns_channel(scope,t['threadId']):continue
                 if hasattr(self.hub,'voting') and self.hub.voting.covers_message(scope,t['threadId'],m):continue
                 if hasattr(self.hub,'pipeline') and self.hub.pipeline.covers_message(scope,t['threadId'],m):continue
                 r=self.db.execute("SELECT * FROM collab_rounds WHERE scope=? AND tid=? AND status='active'",(scope,t['threadId'])).fetchone()
@@ -347,7 +348,7 @@ class Collaboration:
         for r in self.db.execute("SELECT id,deadline FROM collab_rounds WHERE status='active'").fetchall():
             if time.time()>r['deadline']:self.end(r['id'],'blocked','협업 시간 제한 45분에 도달했습니다.')
         for agent,active in list(self.hub.active.items()):
-            if active['job'].get('poll_id') or active['job'].get('pipeline_id'):continue
+            if active['job'].get('poll_id') or active['job'].get('pipeline_id') or active['job'].get('manual_id'):continue
             if not active['future'].done():continue
             task=active['job']
             try:result=active['future'].result();error=None

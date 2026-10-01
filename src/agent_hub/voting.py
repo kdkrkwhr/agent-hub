@@ -48,6 +48,7 @@ class Voting:
         team=list(dict.fromkeys(team))
         if type(minutes) is not int or minutes not in (5,15,30):raise ValueError('마감 시간은 5분, 15분, 30분 중 선택해 주세요.')
         tid=body.get('threadId');scope=self.hub.scope(cfg)
+        if hasattr(self.hub,'manual') and self.hub.manual.owns_channel(scope,tid):raise ValueError('이 채널의 수동 세션을 먼저 종료하세요.')
         t=next((t for t in self.hub.threads if t['threadId']==tid and t.get('state')!='closed' and not t.get('detached')),None)
         if not t:raise ValueError('열린 채널을 선택해 주세요.')
         if cfg['mode']!='demo' and (not self.hub.connected or not cfg['automatic']):raise ValueError('Coral 연결과 허브 자동 응답을 켜 주세요.')

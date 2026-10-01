@@ -24,7 +24,11 @@ class InstanceLock:
     def __exit__(self,*args):self.file.close()
 
 def main():
-    p=argparse.ArgumentParser(description='AGENT HUB RADIO — local Coral collaboration')
+    if len(sys.argv)>1 and sys.argv[1]=='chat':
+        from .cli import main as chat_main
+        return chat_main(sys.argv[2:])
+    p=argparse.ArgumentParser(description='AGENT HUB RADIO — local Coral collaboration',
+                            epilog='Manual terminal session: agent-hub chat --source <Git repository>')
     p.add_argument('--port',type=int,default=None)
     p.add_argument('--data-dir',type=Path,default=None)
     p.add_argument('--no-browser',action='store_true')

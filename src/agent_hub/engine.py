@@ -40,13 +40,17 @@ class Hub:
         self.voting=Voting(self)
         from .pipeline import Pipeline
         self.pipeline=Pipeline(self)
+        from .manual import ManualSessions
+        self.manual=ManualSessions(self)
         from .notifications import Notifications
         self.notifications=Notifications(self)
         self.demo=[];self.revision=0
         if self.config.value:self.threads=self.archived_threads([],self.config.value)
         self.thread=threading.Thread(target=self.loop,daemon=True)
 
-    def start(self):self.thread.start()
+    def start(self, *, manual_only=False):
+        if not manual_only:self.thread.start()
+        self.manual.thread.start()
 
     def scope(self,cfg):
         return hashlib.sha256(json.dumps({k:cfg.get(k) for k in ('mode','agents','observer','url_file','endpoints')},sort_keys=True).encode()).hexdigest()
@@ -105,7 +109,7 @@ class Hub:
     def snapshot(self):
         with self.lock:
             rounds,collab_jobs=self.collaboration.snapshot(self.scope(self.config.value or {}))
-            return {'pipelines':self.pipeline.snapshot(self.scope(self.config.value or {})),'polls':self.voting.snapshot(self.scope(self.config.value or {})),'collaboration':rounds,'collaboration_jobs':collab_jobs,'configured':self.config.value is not None,'config':self.config.public(),
+            return {'manual_sessions':self.manual.list(),'pipelines':self.pipeline.snapshot(self.scope(self.config.value or {})),'polls':self.voting.snapshot(self.scope(self.config.value or {})),'collaboration':rounds,'collaboration_jobs':collab_jobs,'configured':self.config.value is not None,'config':self.config.public(),
                 'connected':self.connected,'error':self.error,'updated':self.updated,
                 'notifications':self.notifications.snapshot(),'notification_scope':self.scope(self.config.value or {}),'channel_notes':self.channels.notes(),'threads':self.threads,'jobs':[dict(r) for r in self.db.execute(
                     "SELECT id,tid,agent,status,attempt,started,ended,error FROM jobs WHERE scope=? AND status NOT IN ('baseline','observed') ORDER BY rowid DESC LIMIT 80",(self.scope(self.config.value or {}),))],
@@ -183,7 +187,7 @@ class Hub:
                 for a in mentions:t['messages'].append({'sendingAgentName':a,'messageText':'[데모 응답] 메시지를 수신했습니다. 실제 모델은 호출하지 않았습니다.','messageTimestamp':time.time(),'mentionAgentNames':[]})
                 return
             active_poll=self.db.execute("SELECT 1 FROM polls WHERE scope=? AND tid=? AND status='active'",(self.scope(cfg),tid)).fetchone()
-            if active_poll or self.pipeline.active_channel(self.scope(cfg),tid):mentions=[]
+            if active_poll or self.pipeline.active_channel(self.scope(cfg),tid) or self.manual.owns_channel(self.scope(cfg),tid):mentions=[]
         self.peer(cfg['observer'],cfg).tool('coral_send_message',threadId=tid,content=text,mentions=mentions)
 
     def set_automatic(self,enabled):
@@ -228,6 +232,8 @@ class Hub:
 
     def cancel(self,key):
         with self.lock:
+            manual=self.db.execute('SELECT session_id FROM manual_turns WHERE id=?',(key,)).fetchone()
+            if manual:self.manual.cancel(manual['session_id']);return
             step=self.db.execute('SELECT pipeline_id FROM pipeline_tasks WHERE id=?',(key,)).fetchone()
             if step:self.pipeline.cancel(step['pipeline_id']);return
             ballot=self.db.execute('SELECT poll_id FROM ballots WHERE id=?',(key,)).fetchone()
@@ -275,6 +281,7 @@ class Hub:
 
     def work(self,cfg,threads):
         for agent,active in list(self.active.items()):
+            if active['job'].get('manual_id'):continue
             if not active['future'].done():continue
             row=active['job'];error=None
             try:result=active['future'].result()
@@ -355,6 +362,7 @@ class Hub:
                             self.collaboration.ingest(threads,cfg);self.collaboration.tick(cfg,threads)
                             self.voting.deliver(cfg,threads)
                             self.pipeline.deliver(cfg,threads)
+                            self.manual.deliver(cfg,threads)
             except Exception:
                 with self.lock:self.connected=False;self.error='Coral connection unavailable. Retrying; check connection settings.'
             self.stop.wait(3)
@@ -364,5 +372,8 @@ class Hub:
         with self.lock:
             for active in self.active.values():active['cancel'].set()
         if self.thread.is_alive():self.thread.join(timeout=20)
+        if self.manual.thread.is_alive():self.manual.thread.join(timeout=20)
         self.pool.shutdown(wait=True,cancel_futures=True)
+        with self.lock:
+            self.manual.collect()
         self.db.close()

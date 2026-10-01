@@ -78,7 +78,7 @@ def migrate(source,target):
             return value
         # Rewrite structured workspace/result references, never historical message text.
         with dst:
-            for table,columns in {'pipelines':['workspace','artifacts'],'pipeline_tasks':['input','result'],'pipeline_publications':['data']}.items():
+            for table,columns in {'pipelines':['workspace','artifacts'],'pipeline_tasks':['input','result'],'pipeline_publications':['data'],'manual_sessions':['data'],'manual_turns':['outcome']}.items():
                 if table not in counts:continue
                 for column in columns:
                     for rowid,value in dst.execute('SELECT rowid,"'+column+'" FROM "'+table+'" WHERE "'+column+'" IS NOT NULL').fetchall():

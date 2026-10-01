@@ -141,6 +141,8 @@ class Pipeline:
             prior_work=self.discussion_context(scope,tid,parent_id)
         else:source,project,base=ws.source_info(body.get('source'))
         if self.db.execute("SELECT 1 FROM pipelines WHERE project=? AND status='active'",(project,)).fetchone():raise ValueError('같은 프로젝트의 역할 작업이 이미 진행 중입니다.')
+        if hasattr(self.hub,'manual') and (self.hub.manual.busy(project) or self.hub.manual.owns_channel(scope,tid)):
+            raise ValueError('이 프로젝트 또는 채널의 수동 세션 작업을 먼저 종료하세요.')
         # Even cancelled processes must exit before the project can be scheduled again.
         for active in self.hub.active.values():
             old=self.get(active['job'].get('pipeline_id',''))

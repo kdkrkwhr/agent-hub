@@ -43,6 +43,7 @@ class Publication:
         if not isinstance(pid,str):raise ValueError('작업 ID를 확인하세요.')
         p=self.pipeline.get(pid)
         if not p or p['scope']!=self.hub.scope(self.hub.config.value or {}) or p['status']!='completed' or not p['artifacts']:raise ValueError('결과물이 있는 완료 작업만 원본에 반영할 수 있습니다.')
+        if hasattr(self.hub,'manual') and self.hub.manual.busy(p['project']):raise ValueError('수동 세션 실행이 끝난 후 반영하세요.')
         if self.db.execute("SELECT 1 FROM pipelines WHERE project=? AND status='active'",(p['project'],)).fetchone() or any(a['job'].get('pipeline_id') and (q:=self.pipeline.get(a['job']['pipeline_id'])) and q['project']==p['project'] for a in self.hub.active.values()):raise ValueError('같은 프로젝트의 실행이 끝난 후 반영하세요.')
         patch=(self.hub.root/'artifacts'/pid/'changes.patch').resolve()
         if not patch.is_file() or patch.stat().st_size>16*1024*1024:raise ValueError('패치가 없거나 16MB 제한을 초과했습니다.')

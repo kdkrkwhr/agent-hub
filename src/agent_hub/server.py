@@ -32,6 +32,17 @@ def make_server(hub,port):
             path=urlsplit(self.path).path
             if path=='/api/state':return self.reply(200,hub.snapshot())
             if path=='/api/models':return self.reply(200,hub.model_info())
+            if path.startswith('/api/manual/'):
+                try:
+                    query=parse_qs(urlsplit(self.path).query);key=query.get('id',[''])[0]
+                    with hub.lock:
+                        if path=='/api/manual/sessions':result=hub.manual.list()
+                        elif path=='/api/manual/session':result=hub.manual.status(key)
+                        elif path=='/api/manual/history':result=hub.manual.history(key)
+                        elif path=='/api/manual/turn':result=hub.manual.turn(key,int(query.get('after',['0'])[0]))
+                        else:raise ValueError('Unknown manual endpoint.')
+                    return self.reply(200,result)
+                except ValueError as e:return self.reply(400,{'error':str(e)})
             if path=='/api/thread/export':
                 from .discussion_export import export_channel
                 try:return self.reply(200,export_channel(hub,parse_qs(urlsplit(self.path).query).get('threadId',[''])[0]))
@@ -39,7 +50,7 @@ def make_server(hub,port):
 
             if path=='/api/bootstrap':
                 from .adapters import inventory
-                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0'})
+                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0','manual_sessions':True,'data_directory':str(hub.root.resolve())})
             if path=='/api/pipeline/artifact':
                 try:
                     query=parse_qs(urlsplit(self.path).query)
@@ -62,6 +73,10 @@ def make_server(hub,port):
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Expected an object.')
                 if self.path=='/api/models':result=hub.save_models(body)
+                elif self.path=='/api/manual/session':result=hub.manual.create(body)
+                elif self.path=='/api/manual/submit':result=hub.manual.submit(body)
+                elif self.path=='/api/manual/manage':result=hub.manual.manage(body)
+                elif self.path=='/api/manual/cancel':result=hub.manual.cancel(body.get('sessionId'))
                 elif self.path=='/api/models/refresh':result=hub.refresh_models()
                 elif self.path=='/api/config':result=hub.save(body)
                 elif self.path=='/api/test':result=hub.test_connection(body)
