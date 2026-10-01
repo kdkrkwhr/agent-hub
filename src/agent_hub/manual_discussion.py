@@ -2,7 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 
-from . import manual_context as context, manual_runner, pipeline_workspace as ws
+from . import manual_context as context, manual_runner, manual_workspace as ws
 
 
 def messages(events, status, error=None):
@@ -32,7 +32,7 @@ def execute(participants, cfg, packet, folder, cancel, live, emit):
     snapshot = packet['context_bucket']['workspace_snapshot']
 
     def unchanged():
-        if ws.fingerprint(snapshot['current_directory'], snapshot['base_commit']) != snapshot['fingerprint']:
+        if ws.fingerprint(snapshot['current_directory'], snapshot.get('base_snapshot') or snapshot['base_commit']) != snapshot['fingerprint']:
             raise ValueError('토론 중 작업 사본이 변경되었습니다. /sync로 확인하세요.')
 
     def speak(agent, shared, round_number):

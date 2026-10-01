@@ -196,6 +196,8 @@ def watch(client, sid, key):
 def repl(client, session):
     sid = session['id']
     print(clean(f"세션: {sid}\n작업 사본: {session['workspace']}\n모드: {'파일 수정 허용' if session['writable'] else '읽기 전용'}"))
+    if session.get('workspace_kind') == 'folder':
+        print('일반 폴더 사본입니다. 시작 시 파일 상태를 기준으로 변경을 기록합니다. Git은 사용하지 않습니다.')
     root = client.bootstrap['data_directory']
     quoted = "'" + root.replace("'", "''") + "'" if os.name == 'nt' else shlex.quote(root)
     port = urllib.parse.urlsplit(client.url).port or 80
@@ -261,7 +263,8 @@ def repl(client, session):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='agent-hub chat', description='공통 기록과 작업 사본을 사용하는 수동 에이전트 세션')
-    parser.add_argument('--source', type=Path, help='새 세션의 깨끗한 Git 저장소 (기본값: 현재 폴더)')
+    parser.add_argument('--source', type=Path, help='새 세션의 작업 폴더 (기본값: 현재 폴더, Git 없어도 사용 가능)')
+    parser.add_argument('--folder', action='store_true', help='새 세션을 일반 폴더 사본으로 시작 (Git·커밋 불필요, 재접속에는 기존 방식 유지)')
     parser.add_argument('--interactive-source', action='store_true', help='새 세션의 프로젝트 경로를 터미널에서 입력')
     parser.add_argument('--resume', help='기존 세션 ID')
     parser.add_argument('--list', action='store_true', help='저장된 세션 목록')
@@ -276,7 +279,7 @@ def main(argv=None):
         parser.error('--resume은 저장된 작업 폴더·채널·권한을 그대로 사용합니다.')
     if args.interactive_source and not (args.source or args.resume or args.list):
         try:
-            value = input('작업할 Git 프로젝트 경로 (빈칸: 종료): ').strip()
+            value = input('작업할 폴더 경로 (Git 불필요, 빈칸: 종료): ').strip()
         except (EOFError, KeyboardInterrupt):
             return 0
         if not value:
@@ -290,9 +293,12 @@ def main(argv=None):
                 for s in client.request('/api/manual/sessions'):
                     print(clean(f"{s['id']}  {s['status']}  {s['source']}"))
                 return 0
+            if args.folder and not args.resume and not client.bootstrap.get('manual_folders'):
+                raise RuntimeError('실행 중인 Hub가 일반 폴더 사본을 지원하지 않습니다. Hub를 최신 코드로 재시작하세요.')
             session = client.session(args.resume) if args.resume else client.request('/api/manual/session', {
                 'source': str((args.source or Path.cwd()).resolve()), 'agent': args.agent,
-                'authorizeWrites': not args.read_only, 'threadId': args.thread})
+                'authorizeWrites': not args.read_only, 'threadId': args.thread,
+                'workspaceMode': 'folder' if args.folder else 'auto'})
             repl(client, session)
         return 0
     except (ValueError, RuntimeError, OSError, urllib.error.URLError) as exc:

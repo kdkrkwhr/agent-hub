@@ -454,6 +454,19 @@ class ManualTests(unittest.TestCase):
         self.assertIn(b'new = True', (Path(result['directory']) / 'changes.patch').read_bytes())
         self.assertEqual(ws.git(self.source, 'status', '--porcelain'), b'')
 
+    def test_folder_mode_accepts_dirty_git_without_changing_original(self):
+        (self.source / 'app.py').write_text('uncommitted = True\n')
+        (self.source / 'new.txt').write_text('untracked\n')
+        before = ws.git(self.source, 'status', '--porcelain')
+        with self.assertRaisesRegex(ValueError, '--folder'):
+            self.m.create({'source': str(self.source)})
+        session = self.m.create({'source': str(self.source), 'workspaceMode': 'folder'})
+        self.assertEqual(session['workspace_kind'], 'folder')
+        self.assertEqual((Path(session['workspace']) / 'app.py').read_text(), 'uncommitted = True\n')
+        self.assertEqual((Path(session['workspace']) / 'new.txt').read_text(), 'untracked\n')
+        self.assertFalse((Path(session['workspace']) / '.git').exists())
+        self.assertEqual(ws.git(self.source, 'status', '--porcelain'), before)
+
     def test_explicit_exclusion_keeps_file_identity_and_full_artifacts(self):
         (self.workspace / 'app.py').write_text('x' * 70000)
         self.m.manage({'sessionId': self.sid, 'action': 'sync'})

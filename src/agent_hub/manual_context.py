@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import re
 
-from . import pipeline_workspace as ws
+from . import manual_workspace as ws
 
 MAX_CONTEXT_BYTES = 192 * 1024
 MAX_FILE_BYTES = 64 * 1024
@@ -43,15 +43,13 @@ def snapshot(session, included):
     before = ws.fingerprint(root, session['base'])
     if before != session['fingerprint']:
         raise ValueError('작업 사본이 외부에서 변경되었습니다. 변경 내용을 확인한 뒤 /sync 하세요.')
-    names = ws.git(root, 'diff', '--no-renames', '--name-only', '-z', 'HEAD').decode('utf-8').split('\0')
-    names += ws.git(root, 'ls-files', '--others', '--exclude-standard', '-z').decode('utf-8').split('\0')
-    changed = sorted(set(n for n in names if n))
+    changed = ws.changes(root, session['base'])
     excluded = json.loads(session.get('excluded', '[]'))
-    available = dict(ws.files(root))
+    available = dict(ws.files(root, session['base']))
     active, binary, deleted = {}, [], []
     for name in sorted(set(changed + included) - set(excluded)):
         if name not in available:
-            raise ValueError('포함할 파일은 Git 관리 대상 또는 무시되지 않은 작업 파일이어야 합니다: ' + name)
+            raise ValueError('포함할 파일은 복사·추적 대상인 작업 파일이어야 합니다: ' + name)
         file = available[name]
         if not file.exists():
             deleted.append(name)
@@ -66,13 +64,15 @@ def snapshot(session, included):
         except UnicodeError:
             binary.append({'path': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
     diff_names = [n for n in changed if n not in excluded]
-    diff = ws.git(root, 'diff', '--no-renames', '--no-ext-diff', '--no-textconv', 'HEAD', '--',
-                  *[':(literal)' + n for n in diff_names]).decode('utf-8', errors='replace') if diff_names else ''
+    diff = ws.diff(root, session['base'], diff_names)
     if before != ws.fingerprint(root, session['base']):
         raise ValueError('컨텍스트 수집 중 파일이 변경되었습니다. /sync 후 다시 요청하세요.')
-    return {'current_directory': str(root), 'base_commit': session['base'], 'fingerprint': before,
+    folder = ws.is_folder(session['base'])
+    return {'current_directory': str(root), 'base_commit': None if folder else session['base'],
+            'base_snapshot': session['base'], 'workspace_kind': 'folder' if folder else 'git', 'fingerprint': before,
             'active_files': active, 'binary_files': binary, 'deleted_files': deleted,
-            'changed_files': changed, 'excluded_files': excluded, 'git_diff': diff}
+            'changed_files': changed, 'excluded_files': excluded,
+            'file_diff': diff if folder else '', 'git_diff': '' if folder else diff}
 
 
 def assemble(session, history, instruction):

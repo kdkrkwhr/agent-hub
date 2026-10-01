@@ -51,7 +51,7 @@ def make_server(hub,port):
 
             if path=='/api/bootstrap':
                 from .adapters import inventory
-                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0','manual_sessions':True,'manual_discussions':True,'data_directory':str(hub.root.resolve())})
+                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0','manual_sessions':True,'manual_discussions':True,'manual_folders':True,'data_directory':str(hub.root.resolve())})
             if path=='/api/pipeline/artifact':
                 try:
                     query=parse_qs(urlsplit(self.path).query)

@@ -10,7 +10,7 @@
 
 ### 한 터미널에서 에이전트 전환
 
-`chat.cmd`를 더블클릭하거나 `agent-hub chat --source <Git 저장소>`로 시작합니다. `@claude`, `@codex`, `@cursor`로 다음 작업자를 선택하고, 여러 명을 함께 멘션하면 동시에 의견을 낸 뒤 서로 읽고 재검토합니다. 같은 대화 기록과 작업 사본을 이어 쓰며, 검증 명령·중단·재접속·패치 내보내기를 지원합니다. [CLI 세션 사용법](docs/manual-cli.md).
+`chat.cmd`를 더블클릭하거나 `agent-hub chat --source <작업 폴더>`로 시작합니다. Git 없는 일반 폴더도 사용할 수 있습니다. `@claude`, `@codex`, `@cursor`로 다음 작업자를 선택하고, 여러 명을 함께 멘션하면 동시에 의견을 낸 뒤 서로 읽고 재검토합니다. 같은 대화 기록과 작업 사본을 이어 쓰며, 검증 명령·중단·재접속·결과 내보내기를 지원합니다. [CLI 세션 사용법](docs/manual-cli.md).
 
 ### 대화와 토론
 
@@ -48,6 +48,8 @@
 
 **Python 3.11+**가 필요합니다.
 
+Git이 없으면 [소스 ZIP 다운로드](https://github.com/kdkrkwhr/agent-hub/archive/refs/heads/main.zip)를 풀고 `chat.cmd`를 실행하세요. Git으로 받을 때는 다음 명령을 사용합니다.
+
 ```sh
 git clone https://github.com/kdkrkwhr/agent-hub.git
 cd agent-hub
@@ -55,7 +57,7 @@ cd agent-hub
 
 ### 터미널에서 바로 사용하기
 
-Windows에서는 저장소의 **`chat.cmd`를 더블클릭**하고 작업할 Git 프로젝트 경로를 입력하세요. Python 3.11+와 사용할 Claude Code·Codex CLI·Cursor Agent의 설치 및 로그인이 필요합니다. 실행기는 `.venv`의 Python이 있으면 사용하고, 없으면 PATH의 `python`을 사용합니다. 별도로 `PYTHONPATH`를 설정할 필요가 없습니다.
+Windows에서는 저장소의 **`chat.cmd`를 더블클릭**하고 작업할 폴더 경로를 입력하세요. **Git 설치·`git init`·커밋 없이 사용할 수 있습니다.** Python 3.11+와 사용할 Claude Code·Codex CLI·Cursor Agent의 설치 및 로그인이 필요합니다. 실행기는 `.venv`의 Python이 있으면 사용하고, 없으면 PATH의 `python`을 사용합니다. 별도로 `PYTHONPATH`를 설정할 필요가 없습니다.
 
 터미널에서는 한 줄로 시작할 수도 있습니다.
 
@@ -63,7 +65,9 @@ Windows에서는 저장소의 **`chat.cmd`를 더블클릭**하고 작업할 Git
 .\chat.cmd --source 'D:\projects\my-app'
 ```
 
-대상은 미커밋·미추적 파일이 없는 Git 저장소여야 합니다. 화면의 `codex>`는 현재 선택된 담당자를 나타냅니다. 아래 내용만 입력하세요.
+`chat.cmd`는 현재 파일 상태를 별도 사본으로 복사합니다. 빈 폴더나 미커밋·미추적 파일이 있는 프로젝트도 사용할 수 있습니다. Git 메타데이터·의존성·캐시·로컬 환경 파일 일부는 복사에서 제외하며, 추가 제외 경로는 원본의 `.agent-hub-ignore`에 적습니다. 일반 폴더 방식에서는 `.gitignore`를 해석하지 않습니다. [복사 범위와 제한](docs/manual-cli.md#일반-폴더의-복사-범위).
+
+화면의 `codex>`는 현재 선택된 담당자를 나타냅니다. 아래 내용만 입력하세요.
 
 ```text
 @claude 프로젝트 구조를 분석해줘
@@ -96,6 +100,8 @@ Windows에서는 저장소의 **`chat.cmd`를 더블클릭**하고 작업할 Git
 ```
 
 코드 수정은 **공유 작업 사본**에 반영됩니다. 원본 반영·커밋·푸시는 현재 CLI에서 지원하지 않으므로 `/export` 결과를 확인해 원본에 적용해야 합니다. CLI는 Coral 없이 사용할 수 있으며, 필요한 로컬 Hub는 자동으로 시작합니다. 실행 중인 Hub가 구버전이면 먼저 해당 서버를 최신 코드로 재시작하세요.
+
+일반 폴더의 `/export`는 텍스트 diff, 변경 파일 ZIP, 추가·수정·삭제 목록을 저장합니다. ZIP의 `files/` 아래 파일을 상대 경로에 맞게 반영하고, 삭제할 파일은 `manifest.json`에서 확인하세요. 기존 Git 세션은 `--resume`으로 원래 방식 그대로 이어집니다. 직접 `agent-hub chat`을 사용할 때도 `--folder`를 붙이면 Git 폴더의 미커밋 파일까지 현재 상태로 복사합니다.
 
 컨텍스트가 **192KB**를 넘으면 `/context`로 원인을 확인하세요. 대화·도구 로그가 크면 `/compact`에 유지할 요구사항, 변경 내용, 검증 결과와 남은 작업을 적고, 코드가 크면 `/exclude 상대경로`로 해당 파일 본문과 diff를 제외합니다. 원문과 작업 파일은 보존됩니다. [상세 사용법과 제한](docs/manual-cli.md).
 

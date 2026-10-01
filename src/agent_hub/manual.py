@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 
-from . import adapters, manual_context as context, manual_discussion, manual_runner, pipeline_workspace as ws
+from . import adapters, manual_context as context, manual_discussion, manual_runner, manual_workspace as ws
 from .storage import path as storage_path
 
 
@@ -77,7 +77,9 @@ class ManualSessions:
         agent = body.get('agent', 'codex')
         if agent not in adapters.NAMES:
             raise ValueError('지원하지 않는 에이전트입니다.')
-        source, project, base = ws.source_info(body.get('source'))
+        source, project, base = ws.source_info(body.get('source'), body.get('workspaceMode', 'auto'))
+        if ws.is_folder(base) and self.hub.root.resolve().is_relative_to(Path(source)):
+            raise ValueError('Hub 데이터 폴더는 복사할 원본 밖에 있어야 합니다. --data-dir로 다른 경로를 지정하세요.')
         with self.hub.lock:
             self.project_free(project)
             cfg = self.hub.config.value or {}
@@ -92,6 +94,7 @@ class ManualSessions:
                     raise ValueError('이 채널의 기존 작업을 먼저 종료하세요.')
             sid = 'manual-' + uuid.uuid4().hex
             session = {'id': sid, 'project': project, 'source': source, 'base': base,
+                       'workspace_kind': 'folder' if ws.is_folder(base) else 'git',
                        'workspace': str((self.hub.root / 'workspaces' / sid / 'repo').resolve()),
                        'status': 'preparing', 'fingerprint': None, 'revision': 0, 'agent': agent,
                        'writable': writable, 'summary': '', 'summary_until': 0, 'included': '[]', 'excluded': '[]',
@@ -100,14 +103,14 @@ class ManualSessions:
             self.save(session)
             self.db.commit()
         try:
-            fingerprint = ws.prepare(source, base, session['workspace'])
+            base, fingerprint = ws.prepare(source, base, session['workspace'])
         except Exception:
             with self.hub.lock:
                 self.save(session, status='interrupted')
                 self.db.commit()
             raise
         with self.hub.lock:
-            self.save(session, status='ready', fingerprint=fingerprint)
+            self.save(session, status='ready', base=base, fingerprint=fingerprint)
             self.db.commit()
             return session
 
@@ -254,13 +257,13 @@ class ManualSessions:
                 names = json.loads(session['included'])
                 excluded = json.loads(session.get('excluded', '[]'))
                 if action == 'include':
-                    if name not in dict(ws.files(session['workspace'])):
-                        raise ValueError('Git 관리 대상 또는 무시되지 않은 작업 파일만 포함할 수 있습니다.')
+                    if name not in dict(ws.files(session['workspace'], session['base'])):
+                        raise ValueError('복사·추적 대상인 작업 파일만 포함할 수 있습니다.')
                     if name not in names:
                         names.append(name)
                     excluded = [n for n in excluded if n != name]
                 else:
-                    if name not in dict(ws.files(session['workspace'])):
+                    if name not in dict(ws.files(session['workspace'], session['base'])):
                         raise ValueError('작업 사본에 속한 파일 경로만 제외할 수 있습니다.')
                     names = [n for n in names if n != name]
                     if name not in excluded:
@@ -303,8 +306,7 @@ class ManualSessions:
             error = '실행에 실패했습니다. 로컬 실행 로그를 확인하세요.'
         try:
             fp = ws.fingerprint(session['workspace'], session['base'])
-            changed = ws.git(session['workspace'], 'diff', '--no-renames', '--name-only', '-z', 'HEAD').decode('utf-8').split('\0')
-            changed += ws.git(session['workspace'], 'ls-files', '--others', '--exclude-standard', '-z').decode('utf-8').split('\0')
+            changed = ws.changes(session['workspace'], session['base'])
             if (discussion or not session['writable']) and fp != session['fingerprint']:
                 error = '읽기 전용 실행에서 파일 변경이 감지되었습니다. /sync로 확인하세요.'
                 fp = None
