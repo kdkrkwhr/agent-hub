@@ -5,12 +5,14 @@ import {setLanguage, t} from './i18n.mjs';
 import {$, notice, renderText} from './view.mjs';
 import {mountSettings, renderSettings} from './settings-view.mjs';
 import {mountThreads, refreshHistory, renderHistory, renderThread, showView} from './threads-view.mjs';
+import {mountCompose, renderPicks} from './compose-view.mjs';
 
 const ctx = {view: 'discussion', threads: [], thread: null, running: null};
 
 function rerender() {
   renderText();
   renderSettings(ctx);
+  renderPicks();
   renderHistory(ctx);
   renderThread(ctx);
 }
@@ -39,6 +41,7 @@ async function main() {
     }
     mountSettings(ctx);
     mountThreads(ctx);
+    mountCompose(ctx);
     rerender();
     showView(ctx, 'discussion');
     anna.window.set_title({title: 'Agent Hub Radio'}).catch(() => {});

@@ -2,6 +2,7 @@
 const state = JSON.parse(localStorage.getItem('test-host') || '{"kv":{}}');
 const faults = JSON.parse(sessionStorage.getItem('test-faults') || '{}');
 const calls = [];
+let streams = 0;
 const persist = () => localStorage.setItem('test-host', JSON.stringify(state));
 window.hostTest = {state, faults, calls};
 
@@ -33,6 +34,21 @@ const runtime = {
     async complete() {
       calls.push({method: 'llm.complete'});
       throw Object.assign(new Error('AI disabled in UI tests'), {code: 'llm_disabled'});
+    },
+    stream(request) {
+      const n = ++streams;
+      calls.push({method: 'llm.stream', system: request.systemPrompt, text: request.messages?.[0]?.content?.text || '', hints: request.modelPreferences?.hints || []});
+      const reply = /JSON/.test(request.systemPrompt) ? '{"choice":"A","reason":"가까워요","concern":"없음"}' : `응답 ${n}`;
+      return (async function* () {
+        await null;
+        if (faults.quota) {
+          yield {event: 'error', code: 'APP_QUOTA_EXCEEDED', message: 'quota exceeded'};
+          return;
+        }
+        yield {event: 'model_token', text: reply.slice(0, 3)};
+        if (faults.stallAt === n) await new Promise(() => {});
+        yield {event: 'complete', content: {text: reply}, model: 'mock/gemini-test'};
+      })();
     },
   },
 };
