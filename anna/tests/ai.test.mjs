@@ -91,6 +91,21 @@ test('abort from a timer stops a stalled stream', async () => {
   assert.equal(closed, true);
 });
 
+test('a stalled stream times out on the client and keeps the partial text', async () => {
+  let closed = false;
+  const llm = {stream() {
+    return {[Symbol.asyncIterator]() { let sent = false; return {
+      next: () => sent ? new Promise(() => {}) : (sent = true, Promise.resolve({value: {event: 'model_token', text: 'part'}, done: false})),
+      return: async () => { closed = true; return {done: true}; },
+    }; }};
+  }};
+  await assert.rejects(createAi(llm).speak({...ask, timeoutMs: 20}), e => e instanceof AiError && e.kind === 'timeout' && e.partial === 'part');
+  assert.equal(closed, true);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 5);
+  await assert.rejects(createAi(llm).speak({...ask, timeoutMs: 1000, signal: controller.signal}), e => e.kind === 'aborted' && e.partial === 'part');
+});
+
 test('explicit codes and AbortError are classified before message text', () => {
   assert.equal(classify({code: 'APP_PROVIDER_ERROR', message: 'insufficient context window'}), 'provider');
   assert.equal(classify(Object.assign(new Error('x'), {name: 'AbortError'})), 'aborted');
