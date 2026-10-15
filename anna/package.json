@@ -1,6 +1,6 @@
 {
   "name": "agent-hub-radio-anna",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Agent Hub Radio on Anna: AI roles that debate, vote and draft together.",
   "scripts": {

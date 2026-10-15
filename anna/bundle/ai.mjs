@@ -7,7 +7,7 @@ export class AiError extends Error {
   }
 }
 
-const UNSUPPORTED = new Set([-32601, 'not_implemented', 'unknown_method']);
+const UNSUPPORTED = new Set([-32601, 'not_implemented', 'unknown_method', 'permission_denied', 'forbidden']);
 
 export function classify(error) {
   const code = error?.code;

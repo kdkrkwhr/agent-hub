@@ -23,3 +23,4 @@ auth.json
 .DS_Store
 Thumbs.db
 anna/node_modules/
+anna/.anna/

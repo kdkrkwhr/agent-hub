@@ -47,6 +47,14 @@ test('falls back to complete when stream throws or its first frame rejects as un
   assert.deepEqual(await createAi(rejecting).speak(ask), {text: 'done', model: 'm'});
 });
 
+test('falls back to complete when streaming is not granted', async () => {
+  const llm = {
+    stream() { return (async function* () { yield {event: 'error', code: 'permission_denied', message: 'llm.stream not granted'}; })(); },
+    async complete() { return {content: {text: 'done'}, model: 'm'}; },
+  };
+  assert.deepEqual(await createAi(llm).speak(ask), {text: 'done', model: 'm'});
+});
+
 test('abort applies to the complete fallback', async () => {
   const controller = new AbortController();
   const llm = {complete: () => new Promise(resolve => setTimeout(() => resolve({content: {text: 'late'}, model: 'm'}), 50))};
