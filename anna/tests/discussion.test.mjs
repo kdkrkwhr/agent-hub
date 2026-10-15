@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {canSkip, createDiscussion, discussionPlan, discussionSteps} from '../bundle/discussion.mjs';
-import {newId, runThread, skipTurn} from '../bundle/runner.mjs';
+import {newId, runThread, settleInterrupted, skipTurn} from '../bundle/runner.mjs';
 import {AiError} from '../bundle/ai.mjs';
 import {defaultSettings} from '../bundle/roles.mjs';
 
@@ -129,6 +129,46 @@ test('save failures are reported and retried on the next save', async () => {
 test('unexpected errors become unavailable failures', async () => {
   const {thread} = await run(lunch(), fakeAi(() => new Error('weird')), fakeStore());
   assert.deepEqual([thread.status, thread.turns[0].error], ['failed', 'unavailable']);
+});
+
+test('a throwing update listener does not stop the run', async () => {
+  const store = fakeStore();
+  const result = await run(lunch(), fakeAi(), store, {onUpdate: () => { throw new Error('render failed'); }});
+  assert.equal(result.thread.status, 'done');
+  assert.equal(store.saved.at(-1).status, 'done');
+});
+
+test('settings missing a role run that role with defaults', async () => {
+  const base = defaultSettings();
+  const store = fakeStore({settings: {...base, roles: {analyst: base.roles.analyst}}});
+  const ai = fakeAi();
+  const {thread} = await run(lunch(), ai, store);
+  assert.equal(thread.status, 'done');
+  assert.equal(ai.calls.length, 9);
+  assert.equal(thread.turns[1].requested, '');
+});
+
+test('skipping clears the partial text and never skips the final', () => {
+  const thread = lunch();
+  Object.assign(thread.turns[3], {status: 'failed', error: 'quota', text: '부분'});
+  Object.assign(thread.turns[6], {status: 'failed', error: 'quota', text: '초안'});
+  skipTurn(thread, 3);
+  assert.deepEqual([thread.turns[3].status, thread.turns[3].text], ['skipped', '']);
+  skipTurn(thread, 6);
+  assert.deepEqual([thread.turns[6].status, thread.turns[6].text], ['failed', '초안']);
+});
+
+test('a thread left running by a closed app settles as stopped', () => {
+  const thread = lunch();
+  thread.status = 'running';
+  thread.turns[0].status = 'done';
+  Object.assign(thread.turns[1], {status: 'running', text: '부분'});
+  assert.equal(settleInterrupted(thread), thread);
+  assert.equal(thread.status, 'stopped');
+  assert.deepEqual(thread.turns.slice(0, 3).map(t => t.status), ['done', 'stopped', 'pending']);
+  assert.equal(thread.turns[1].text, '부분');
+  const done = {...lunch(), status: 'done'};
+  assert.equal(settleInterrupted(done).status, 'done');
 });
 
 test('thread ids are storage-safe and unique', () => {

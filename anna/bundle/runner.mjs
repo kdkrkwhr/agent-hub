@@ -13,14 +13,25 @@ export const settled = turn => turn.status === 'done' || turn.status === 'skippe
 
 export function skipTurn(thread, index) {
   const turn = thread.turns[index];
-  if (turn && !settled(turn)) Object.assign(turn, {status: 'skipped', error: ''});
+  if (turn && turn.step !== 'final' && !settled(turn)) Object.assign(turn, {status: 'skipped', error: '', text: ''});
+  return thread;
+}
+
+export function settleInterrupted(thread) {
+  if (thread.status !== 'running') return thread;
+  thread.status = 'stopped';
+  for (const turn of thread.turns) if (turn.status === 'running') turn.status = 'stopped';
   return thread;
 }
 
 export async function runThread({thread, plan, ai, store, settings, signal, onUpdate = () => {}, now = Date.now}) {
   let latest = settings;
   let saveFailed = false;
-  const update = () => onUpdate(thread, {saveFailed});
+  const update = () => {
+    try {
+      onUpdate(thread, {saveFailed});
+    } catch {}
+  };
   async function save() {
     thread.updated = now();
     try {
@@ -35,10 +46,11 @@ export async function runThread({thread, plan, ai, store, settings, signal, onUp
   for (let index = 0; index < thread.turns.length; index += 1) {
     const turn = thread.turns[index];
     if (settled(turn)) continue;
-    const role = latest.roles[turn.role];
-    Object.assign(turn, {status: 'running', text: '', model: '', error: '', requested: requestedLabel(role)});
+    Object.assign(turn, {status: 'running', text: '', model: '', error: '', requested: ''});
     update();
     try {
+      const role = latest.roles?.[turn.role] || {};
+      turn.requested = requestedLabel(role);
       const {system, messages, maxTokens} = plan.prompt(thread, index);
       const reply = await ai.speak({
         system,
