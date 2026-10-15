@@ -6,6 +6,10 @@ export const threadKey = id => `thread/${id}`;
 const THREAD_PATTERN = /^thread\/([^/]+)$/;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
+function assertId(id) {
+  if (typeof id !== 'string' || !ID_PATTERN.test(id)) throw new Error('Invalid thread id');
+}
+
 export function summary(thread) {
   return {
     id: thread.id,
@@ -58,10 +62,11 @@ export function createStore(storage) {
     },
     listThreads,
     async loadThread(id) {
+      assertId(id);
       return read(threadKey(id));
     },
     async saveThread(thread) {
-      if (typeof thread?.id !== 'string' || !ID_PATTERN.test(thread.id)) throw new Error('Invalid thread id');
+      assertId(thread?.id);
       return serial(async () => {
         await storage.set({key: threadKey(thread.id), value: thread});
         const items = (await listThreads()).filter(item => item.id !== thread.id);
@@ -69,7 +74,8 @@ export function createStore(storage) {
         return writeIndex(items);
       });
     },
-    deleteThread(id) {
+    async deleteThread(id) {
+      assertId(id);
       return serial(async () => {
         try {
           await storage.delete({key: threadKey(id)});
@@ -88,7 +94,7 @@ export function createStore(storage) {
           const items = page && typeof page === 'object' ? page.items ?? page.entries : undefined;
           if (!Array.isArray(items)) throw new Error('Invalid storage listing');
           for (const item of items) {
-            const match = THREAD_PATTERN.exec(item.key);
+            const match = THREAD_PATTERN.exec(String(item?.key ?? ''));
             if (match) ids.push(match[1]);
           }
           cursor = page.next_cursor ?? page.cursor ?? null;

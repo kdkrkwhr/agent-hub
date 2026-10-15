@@ -106,3 +106,22 @@ test('errors are classified for the user', async () => {
   await assert.rejects(createAi(failing).speak(ask), e => e.kind === 'quota' && e.partial === 'x');
   await assert.rejects(createAi(streamOf([])).speak(ask), e => e.kind === 'unavailable');
 });
+
+test('a throwing iterator.return does not replace the reply', async () => {
+  const llm = {stream: () => ({[Symbol.asyncIterator]: () => ({
+    next: async () => ({value: {event: 'complete', content: {text: 'ok'}, model: 'm'}, done: false}),
+    return() { throw new Error('boom'); },
+  })})};
+  assert.deepEqual(await createAi(llm).speak(ask), {text: 'ok', model: 'm'});
+});
+
+test('abort applies to the complete fallback after a thrown unsupported stream', async () => {
+  const controller = new AbortController();
+  const llm = {
+    stream() { throw Object.assign(new Error('nope'), {code: -32601}); },
+    complete: () => new Promise(resolve => setTimeout(() => resolve({content: {text: 'late'}, model: 'm'}), 50)),
+  };
+  const pending = createAi(llm).speak({...ask, signal: controller.signal});
+  setTimeout(() => controller.abort(), 5);
+  await assert.rejects(pending, error => error instanceof AiError && error.kind === 'aborted');
+});

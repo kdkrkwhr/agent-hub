@@ -137,3 +137,19 @@ test('concurrent settings updates both survive', async () => {
   assert.equal(m.kv.settings.language, 'en');
   assert.deepEqual(m.kv.settings.seenModels, ['openai/gpt-5-mini']);
 });
+
+test('loading or deleting an invalid id is rejected without storage access', async () => {
+  const m = memory({'thread/a/b': {x: 1}});
+  const store = createStore(m.storage);
+  await assert.rejects(store.loadThread('a/b'), /Invalid thread id/);
+  await assert.rejects(store.deleteThread('a/b'), /Invalid thread id/);
+  assert.equal(Object.hasOwn(m.kv, 'thread/a/b'), true);
+  assert.deepEqual(m.log, []);
+});
+
+test('repair skips listing items without a key', async () => {
+  const m = memory({[threadKey('a')]: thread('a', 1)});
+  const list = m.storage.list;
+  m.storage.list = async query => { const page = await list(query); return {...page, items: [null, {}, ...page.items]}; };
+  assert.deepEqual((await createStore(m.storage).repairIndex()).map(t => t.id), ['a']);
+});

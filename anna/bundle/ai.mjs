@@ -80,7 +80,9 @@ export function createAi(llm) {
       throw new AiError(classify(error), error?.message || 'AI unavailable', text);
     } finally {
       signal?.removeEventListener('abort', onAbort);
-      iterator?.return?.().catch?.(() => {});
+      try {
+        iterator?.return?.()?.catch?.(() => {});
+      } catch {}
     }
   }
 
