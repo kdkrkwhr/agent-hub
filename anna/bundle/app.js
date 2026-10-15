@@ -89,10 +89,11 @@ function readForm() {
 
 async function save(event) {
   event.preventDefault();
-  const button = event.submitter;
+  const button = $('#settings-form button[type="submit"]');
   button.disabled = true;
   try {
-    settings = await store.saveSettings(readForm());
+    const {roles} = readForm();
+    settings = await store.updateSettings(current => ({...current, roles}));
     render();
     notice(t('saved'));
   } catch {
@@ -103,12 +104,19 @@ async function save(event) {
 }
 
 async function changeLanguage() {
+  const previous = getLanguage();
+  const {roles} = readForm();
   setLanguage($('#language').value);
-  settings = {...readForm(), language: getLanguage()};
+  const language = getLanguage();
+  settings = {...settings, roles, language};
   render();
   try {
-    settings = await store.saveSettings(settings);
+    settings = await store.updateSettings(current => ({...current, roles, language}));
   } catch {
+    $('#language').value = previous;
+    setLanguage(previous);
+    settings = {...settings, language: previous};
+    render();
     notice(t('saveFailed'));
   }
 }
@@ -125,6 +133,7 @@ async function main() {
     $('#settings-form').addEventListener('submit', save);
     $('#language').addEventListener('change', changeLanguage);
     anna.window.set_title({title: 'Agent Hub Radio'}).catch(() => {});
+    $('#settings-form button[type="submit"]').disabled = false;
     document.body.dataset.ready = 'true';
   } catch {
     notice(t('loadFailed'));

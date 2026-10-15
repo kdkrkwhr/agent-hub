@@ -103,6 +103,19 @@ test('connection failure shows a reopen notice', async t => {
   const page = await setup(t, {faults: {connect: true}});
   await page.waitForFunction(() => !document.querySelector('#notice').hidden);
   assert.match(await page.locator('#notice').textContent(), /Anna에 연결하지 못했어요/);
+  assert.equal(await page.locator('#settings-form button[type="submit"]').isDisabled(), true);
+  assert.equal(await page.evaluate(() => document.body.dataset.ready), undefined);
+});
+
+test('a failed language save keeps the previous language', async t => {
+  const page = await setup(t, {faults: {save: true}});
+  await ready(page);
+  await page.selectOption('#language', 'en');
+  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('저장하지 못했어요'));
+  assert.equal(await page.locator('#language').inputValue(), 'ko');
+  assert.equal(await page.locator('#settings-title').textContent(), '역할과 모델');
+  assert.equal(await page.locator('fieldset.role[data-role="analyst"] legend').textContent(), '분석가');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'ko');
 });
 
 test('mobile width has no horizontal overflow', async t => {
