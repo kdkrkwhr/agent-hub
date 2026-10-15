@@ -84,3 +84,9 @@ export function recordModel(settings, model) {
   if (!name) return settings;
   return {...settings, seenModels: [name, ...settings.seenModels.filter(m => m !== name)].slice(0, MAX_SEEN)};
 }
+
+export function modelMismatch(turn) {
+  const requested = String(turn?.requested || '').toLowerCase();
+  const model = String(turn?.model || '').toLowerCase();
+  return Boolean(requested && model && !model.includes(requested));
+}

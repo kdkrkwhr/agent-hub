@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ROLE_IDS, ROLES, defaultSettings, normalizeSettings, modelPreferences, requestedLabel, recordModel} from '../bundle/roles.mjs';
+import {ROLE_IDS, ROLES, defaultSettings, normalizeSettings, modelPreferences, requestedLabel, recordModel, modelMismatch} from '../bundle/roles.mjs';
 
 test('three bilingual roles with balanced automatic defaults', () => {
   assert.deepEqual(ROLE_IDS, ['analyst', 'critic', 'editor']);
@@ -40,4 +40,12 @@ test('recording a model moves it to the front without mutating settings', () => 
   assert.deepEqual(after.seenModels, ['a', 'b']);
   assert.deepEqual(before.seenModels, ['b', 'a']);
   assert.equal(recordModel(before, ''), before);
+});
+
+test('a requested model or family missing from the actual model is a mismatch', () => {
+  assert.equal(modelMismatch({requested: 'claude', model: 'google/gemini-3-flash-preview'}), true);
+  assert.equal(modelMismatch({requested: 'gemini', model: 'google/gemini-3-flash-preview'}), false);
+  assert.equal(modelMismatch({requested: 'openai/gpt-5-mini', model: 'openai/gpt-5-mini'}), false);
+  assert.equal(modelMismatch({requested: '', model: 'x'}), false);
+  assert.equal(modelMismatch({requested: 'gpt', model: ''}), false);
 });
