@@ -56,18 +56,31 @@ export function votePrompt(thread, index) {
   };
 }
 
-export function parseBallot(text, options) {
-  const match = /\{[\s\S]*\}/.exec(String(text || ''));
-  if (!match) return null;
+const field = (value, max) => typeof value === 'string' ? value.trim().slice(0, max) : '';
+
+function readBallot(source, options) {
   let value;
   try {
-    value = JSON.parse(match[0]);
+    value = JSON.parse(source);
   } catch {
     return null;
   }
-  const choice = String(value?.choice || '').trim().toUpperCase();
+  const choice = typeof value?.choice === 'string' ? value.choice.trim().toUpperCase() : '';
   if (![...options.map(option => option.id), 'ABSTAIN'].includes(choice)) return null;
-  return {choice, reason: String(value.reason || '').trim().slice(0, 600), concern: String(value.concern || '').trim().slice(0, 300)};
+  return {choice, reason: field(value.reason, 600), concern: field(value.concern, 300)};
+}
+
+export function parseBallot(text, options) {
+  const source = String(text || '').replace(/```(?:json)?/gi, '').trim();
+  const whole = readBallot(source, options);
+  if (whole) return whole;
+  for (let start = source.indexOf('{'); start !== -1; start = source.indexOf('{', start + 1)) {
+    for (let end = source.indexOf('}', start); end !== -1; end = source.indexOf('}', end + 1)) {
+      const ballot = readBallot(source.slice(start, end + 1), options);
+      if (ballot) return ballot;
+    }
+  }
+  return null;
 }
 
 export function tally(thread) {

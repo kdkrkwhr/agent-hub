@@ -47,6 +47,13 @@ test('ballots parse from plain or fenced JSON and reject unknown choices', () =>
   assert.equal(parseBallot('{bad json}', options), null);
 });
 
+test('ballots are found among other braces and keep only text fields', () => {
+  const options = [{id: 'A', text: 'x'}, {id: 'B', text: 'y'}];
+  assert.deepEqual(parseBallot('Options {A,B}. {"choice":"A","reason":"r","concern":"c"}', options), {choice: 'A', reason: 'r', concern: 'c'});
+  assert.equal(parseBallot('{"choice":"Z","reason":"x"} then {"choice":"B","reason":"y"}', options).choice, 'B');
+  assert.deepEqual(parseBallot('{"choice":"A","reason":{"why":"x"},"concern":3}', options), {choice: 'A', reason: '', concern: ''});
+});
+
 test('results stay hidden until every ballot is settled', async () => {
   const thread = lunch();
   assert.equal(tally(thread), null);
