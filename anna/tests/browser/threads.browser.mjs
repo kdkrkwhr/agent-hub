@@ -122,6 +122,41 @@ test('deleting needs a second click', async t => {
   assert.deepEqual(await titles(page), ['어느 쪽']);
 });
 
+test('an armed delete button resets after four seconds', async t => {
+  const page = await setup(t, {kv: seeded()});
+  await ready(page);
+  await open(page, 'd1');
+  await page.click('#thread-actions button.remove');
+  await page.waitForTimeout(4200);
+  assert.equal(await page.locator('#thread-actions button.remove').textContent(), '삭제');
+  await page.click('#thread-actions button.remove');
+  assert.equal(await page.locator('#thread-actions button.remove').textContent(), '한 번 더 누르면 삭제');
+  assert.equal(await page.evaluate(() => Boolean(window.hostTest.state.kv['thread/d1'])), true);
+});
+
+test('a thread left running by a closed window opens as stopped', async t => {
+  const running = {...discussion, status: 'running', turns: discussion.turns.map((item, index) => index === 3 ? {...item, status: 'running', text: '부분'} : index > 3 ? {...item, status: 'pending', text: '', model: ''} : item)};
+  const page = await setup(t, {kv: {threads: [entry(running)], 'thread/d1': running}});
+  await ready(page);
+  await open(page, 'd1');
+  assert.match(await page.locator('#thread-meta').textContent(), /중단됨/);
+  assert.equal(await page.locator('#turns .turn').nth(3).getAttribute('data-status'), 'stopped');
+  assert.equal(await page.locator('#thread-actions button.resume').count(), 1);
+});
+
+test('the notice stays in the page and the content leaves room for it', async t => {
+  const page = await setup(t, {kv: seeded()});
+  await ready(page);
+  const state = () => page.evaluate(() => ({hidden: document.querySelector('#notice').hidden, display: getComputedStyle(document.querySelector('#notice')).display, pad: getComputedStyle(document.querySelector('main')).paddingBottom}));
+  assert.deepEqual(await state(), {hidden: false, display: 'none', pad: '72px'});
+  await page.setViewportSize({width: 360, height: 740});
+  assert.equal((await state()).pad, '72px');
+  await open(page, 'd1');
+  await page.click('#thread-actions button.copy');
+  await page.waitForFunction(() => document.querySelector('#notice').textContent !== '');
+  assert.notEqual((await state()).display, 'none');
+});
+
 test('threads missing from the index are recovered on start', async t => {
   const page = await setup(t, {kv: {'thread/d1': discussion}});
   await ready(page);

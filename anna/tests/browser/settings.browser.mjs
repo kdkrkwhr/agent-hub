@@ -69,7 +69,7 @@ test('save failures keep the form and explain the problem', async t => {
 
 test('connection failure shows a reopen notice', async t => {
   const page = await setup(t, {faults: {connect: true}});
-  await page.waitForFunction(() => !document.querySelector('#notice').hidden);
+  await page.waitForFunction(() => document.querySelector('#notice').textContent !== '');
   assert.match(await page.locator('#notice').textContent(), /Anna에 연결하지 못했어요/);
   assert.equal(await page.locator('#settings-form button[type="submit"]').isDisabled(), true);
   assert.equal(await page.evaluate(() => document.body.dataset.ready), undefined);

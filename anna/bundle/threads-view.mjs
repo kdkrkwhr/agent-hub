@@ -1,7 +1,7 @@
-import {$, button, node, notice} from './view.mjs';
+import {$, button, later, node, notice} from './view.mjs';
 import {getLanguage, t} from './i18n.mjs';
 import {ROLES, modelMismatch} from './roles.mjs';
-import {runThread, skipTurn} from './runner.mjs';
+import {runThread, settleInterrupted, skipTurn} from './runner.mjs';
 import {canSkip, discussionPlan} from './discussion.mjs';
 import {parseBallot, tally, votePlan} from './voting.mjs';
 import {exportName, toMarkdown} from './export.mjs';
@@ -22,7 +22,7 @@ export function renderHistory(ctx) {
   const list = $('#thread-list');
   if (!items.length) return list.replaceChildren(node('li', 'empty', t('empty')));
   list.replaceChildren(...items.map(item => {
-    const open = button('', () => openThread(ctx, item.id), 'thread-item');
+    const open = button('', () => later(openThread(ctx, item.id)), 'thread-item');
     open.dataset.id = item.id;
     open.append(node('strong', '', item.title), node('span', 'meta', `${t(`kind-${item.kind}`)} · ${t(`status-${item.status}`)} · ${when(item.updated)}`));
     const entry = node('li');
@@ -44,12 +44,20 @@ export function showThread(ctx, thread) {
   renderThread(ctx);
 }
 
+let opening = 0;
+
 export async function openThread(ctx, id) {
+  const request = ++opening;
   let thread = null;
   try {
     thread = ctx.running?.thread.id === id ? ctx.running.thread : await ctx.store.loadThread(id);
   } catch {}
+  if (request !== opening) return;
   if (!thread) return notice(t('openFailed'));
+  if (thread !== ctx.running?.thread && thread.status === 'running') {
+    settleInterrupted(thread);
+    ctx.store.saveThread(thread).then(threads => { ctx.threads = threads; }).catch(() => {});
+  }
   showThread(ctx, thread);
 }
 
@@ -85,11 +93,11 @@ function turnItem(ctx, thread, turn, index, revealed) {
   if (turn.error) item.append(node('p', 'error', t(`error-${turn.error}`)));
   if (!ctx.running && (turn.status === 'failed' || turn.status === 'stopped')) {
     const actions = node('div', 'actions');
-    actions.append(button(t('retry'), () => run(ctx, thread), 'retry'));
+    actions.append(button(t('retry'), () => later(run(ctx, thread)), 'retry'));
     if (thread.kind === 'vote' || canSkip(turn)) {
       actions.append(button(t('skip'), () => {
         skipTurn(thread, index);
-        run(ctx, thread);
+        later(run(ctx, thread));
       }, 'skip'));
     }
     item.append(actions);
@@ -173,15 +181,26 @@ function removeButton(ctx, thread) {
   return element;
 }
 
+const shape = thread => `${thread.status}|${thread.turns.map(turn => `${turn.status}:${turn.requested}`).join(',')}`;
+
+function patchText(thread) {
+  const turn = thread.turns.find(item => item.status === 'running');
+  const item = $('#turns .turn[data-status="running"]');
+  if (thread.kind === 'vote' || !turn || !item) return;
+  const text = item.querySelector('.text') || item.appendChild(node('p', 'text'));
+  text.textContent = turn.text;
+}
+
 export function renderThread(ctx) {
   const thread = ctx.thread;
   if (!thread || ctx.view !== 'thread') return;
+  ctx.shape = shape(thread);
   const running = ctx.running?.thread === thread;
   $('#thread-title').textContent = thread.title;
   $('#thread-meta').textContent = `${t(`kind-${thread.kind}`)} · ${t(`status-${thread.status}`)} · ${when(thread.updated)}`;
   const actions = [];
   if (running) actions.push(button(t('stop'), () => ctx.running.controller.abort(), 'stop'));
-  if (!ctx.running && thread.status !== 'done') actions.push(button(t('resume'), () => run(ctx, thread), 'resume'));
+  if (!ctx.running && thread.status !== 'done') actions.push(button(t('resume'), () => later(run(ctx, thread)), 'resume'));
   if (!running) {
     actions.push(
       button(t('exportFile'), () => download(thread), 'export'),
@@ -216,18 +235,22 @@ export async function run(ctx, thread) {
           warned = true;
           notice(t('saveRetry'));
         }
-        if (ctx.thread === current) renderThread(ctx);
+        if (ctx.thread !== current) return;
+        if (shape(current) === ctx.shape) patchText(current);
+        else renderThread(ctx);
       },
     });
-    ctx.settings = result.settings;
+    ctx.settings = {...ctx.settings, seenModels: result.settings.seenModels};
     const failed = thread.turns.find(turn => turn.status === 'failed');
     if (failed) notice(t(`error-${failed.error}`));
     else if (result.saveFailed) notice(t('saveRetry'));
   } finally {
     ctx.running = null;
-    renderThread(ctx);
-    await refreshHistory(ctx);
-    ctx.onSettings();
+    for (const step of [() => renderThread(ctx), () => refreshHistory(ctx), () => ctx.onSettings()]) {
+      try {
+        await step();
+      } catch {}
+    }
   }
 }
 
@@ -235,6 +258,6 @@ export function mountThreads(ctx) {
   $('#show-archived').addEventListener('change', () => renderHistory(ctx));
   $('#back').addEventListener('click', () => {
     showView(ctx, 'history');
-    refreshHistory(ctx);
+    later(refreshHistory(ctx));
   });
 }

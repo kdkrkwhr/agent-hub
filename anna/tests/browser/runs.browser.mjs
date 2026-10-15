@@ -100,6 +100,8 @@ test('vote ballots stay sealed until every role has voted', async t => {
   await page.waitForSelector('#turns .turn:nth-child(3)[data-status="running"]');
   assert.equal(await page.locator('#turns .turn .sealed').count(), 2);
   assert.equal(await page.locator('#turns .turn .choice').count(), 0);
+  assert.equal(await page.locator('#turns .turn .text').count(), 0);
+  assert.doesNotMatch(await page.locator('#turns').textContent(), /\{"c|가까워요/);
   assert.equal(await page.locator('#vote-result').isHidden(), true);
   await page.click('#thread-actions button.stop');
   await meta(page, /중단됨/);
@@ -120,6 +122,48 @@ test('a failed ballot can be skipped and the rest still count', async t => {
   await meta(page, /완료/);
   assert.equal(await page.locator('#turns .turn').first().getAttribute('data-status'), 'skipped');
   assert.match(await page.locator('#vote-result').textContent(), /A\. 짜장 — 2표/);
+});
+
+test('a double click starts one discussion', async t => {
+  const page = await setup(t);
+  await ready(page);
+  await page.fill('#discussion-form textarea[name="request"]', '점심 메뉴를 정해 줘');
+  await page.evaluate(() => {
+    const submit = document.querySelector('#discussion-form button[type="submit"]');
+    submit.click();
+    submit.click();
+  });
+  await meta(page, /완료/);
+  assert.equal(await page.evaluate(() => window.hostTest.state.kv.threads.length), 1);
+  assert.equal(await page.evaluate(() => Object.keys(window.hostTest.state.kv).filter(key => key.startsWith('thread/')).length), 1);
+  assert.equal((await llm(page)).length, 9);
+});
+
+test('streamed tokens update the text without replacing the stop button', async t => {
+  const page = await setup(t, {faults: {slowTokens: true, stallAt: 1}});
+  await ready(page);
+  await discuss(page);
+  await page.waitForFunction(() => /토큰1/.test(document.querySelector('#turns .turn[data-status="running"] .text')?.textContent));
+  const stop = await page.$('#thread-actions button.stop');
+  await page.waitForFunction(() => /토큰5/.test(document.querySelector('#turns .turn[data-status="running"] .text')?.textContent));
+  assert.equal(await stop.evaluate(element => element.isConnected), true);
+  await stop.click();
+  await meta(page, /중단됨/);
+  assert.match(await page.locator('#turns .turn').first().locator('.text').textContent(), /토큰1 토큰2 토큰3 토큰4 토큰5/);
+});
+
+test('unsaved settings edits survive a run', async t => {
+  const page = await setup(t);
+  await ready(page);
+  await openTab(page, 'settings');
+  await page.selectOption('select[name="critic-temperament"]', 'deep');
+  await openTab(page, 'discussion');
+  await discuss(page);
+  await meta(page, /완료/);
+  await openTab(page, 'settings');
+  await page.waitForFunction(() => !document.querySelector('select[name="analyst-model"]').disabled);
+  assert.equal(await page.locator('select[name="critic-temperament"]').inputValue(), 'deep');
+  assert.deepEqual(await page.locator('select[name="analyst-model"] option').evaluateAll(els => els.map(e => e.value)), ['', 'mock/gemini-test']);
 });
 
 test('starting checks the text, the roles and the options', async t => {

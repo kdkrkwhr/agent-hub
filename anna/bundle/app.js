@@ -2,8 +2,8 @@ import {AnnaAppRuntime} from '/static/anna-apps/_sdk/latest/index.js';
 import {createStore} from './store.mjs';
 import {createAi} from './ai.mjs';
 import {setLanguage, t} from './i18n.mjs';
-import {$, notice, renderText} from './view.mjs';
-import {mountSettings, renderSettings} from './settings-view.mjs';
+import {$, later, notice, renderText} from './view.mjs';
+import {mountSettings, refreshModels, renderSettings} from './settings-view.mjs';
 import {mountThreads, refreshHistory, renderHistory, renderThread, showView} from './threads-view.mjs';
 import {mountCompose, renderPicks} from './compose-view.mjs';
 
@@ -25,7 +25,7 @@ async function main() {
     ctx.ai = createAi(anna.llm);
     ctx.settings = await ctx.store.loadSettings();
     ctx.rerender = rerender;
-    ctx.onSettings = () => renderSettings(ctx);
+    ctx.onSettings = () => refreshModels(ctx);
     setLanguage(ctx.settings.language);
     $('#language').value = ctx.settings.language;
     try {
@@ -36,7 +36,7 @@ async function main() {
     for (const tab of document.querySelectorAll('#tabs [data-view]')) {
       tab.addEventListener('click', () => {
         showView(ctx, tab.dataset.view);
-        if (tab.dataset.view === 'history') refreshHistory(ctx);
+        if (tab.dataset.view === 'history') later(refreshHistory(ctx));
       });
     }
     mountSettings(ctx);

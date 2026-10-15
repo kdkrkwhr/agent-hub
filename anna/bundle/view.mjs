@@ -17,10 +17,10 @@ export function button(label, onClick, className = '') {
 }
 
 export function notice(text) {
-  const element = $('#notice');
-  element.textContent = text;
-  element.hidden = !text;
+  $('#notice').textContent = text;
 }
+
+export const later = promise => promise.catch(() => notice(t('loadFailed')));
 
 export function renderText() {
   document.documentElement.lang = getLanguage();

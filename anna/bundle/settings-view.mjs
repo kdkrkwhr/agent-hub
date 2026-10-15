@@ -55,6 +55,11 @@ function readRoles() {
   }]));
 }
 
+export function refreshModels(ctx) {
+  if (!$('#settings-form [name$="-temperament"]')) return renderSettings(ctx);
+  renderSettings({...ctx, settings: {...ctx.settings, roles: readRoles()}});
+}
+
 export function mountSettings(ctx) {
   const form = $('#settings-form');
   const submit = form.querySelector('button[type="submit"]');

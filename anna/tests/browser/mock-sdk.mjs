@@ -45,7 +45,11 @@ const runtime = {
           yield {event: 'error', code: 'APP_QUOTA_EXCEEDED', message: 'quota exceeded'};
           return;
         }
-        yield {event: 'model_token', text: reply.slice(0, 3)};
+        const tokens = faults.slowTokens ? ['토큰1', ' 토큰2', ' 토큰3', ' 토큰4', ' 토큰5'] : [reply.slice(0, 3)];
+        for (const [index, text] of tokens.entries()) {
+          if (index) await new Promise(resolve => setTimeout(resolve, 30));
+          yield {event: 'model_token', text};
+        }
         if (faults.stallAt === n) await new Promise(() => {});
         yield {event: 'complete', content: {text: reply}, model: 'mock/gemini-test'};
       })();
