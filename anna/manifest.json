@@ -1,0 +1,38 @@
+{
+  "schema": 3,
+  "host_capabilities": ["llm.complete"],
+  "required_executas": [],
+  "optional_executas": [],
+  "system_prompt_addendum": "Agent Hub Radio runs role-play discussions, votes and document drafts in its own window. It never edits files or runs code. Each role reply shows the model Anna actually used.",
+  "tags": ["agents", "debate", "voting", "productivity", "korean"],
+  "ui": {
+    "bundle": {"format": "static-spa", "entry": "index.html", "external_origins": []},
+    "views": [
+      {
+        "name": "main",
+        "title": "Agent Hub Radio",
+        "default": true,
+        "entry": "index.html",
+        "min_size": {"w": 360, "h": 540},
+        "default_size": {"w": 1180, "h": 820},
+        "max_size": {"w": 1800, "h": 1400},
+        "resizable": true,
+        "movable": true,
+        "single_instance": true
+      }
+    ],
+    "host_api": {
+      "llm": ["complete", "stream"],
+      "storage": ["get", "set", "list", "delete"],
+      "window": ["set_title"]
+    },
+    "csp_overrides": {
+      "style-src": ["'self'"],
+      "script-src": ["'self'"],
+      "img-src": ["'self'", "data:"],
+      "font-src": ["'self'"]
+    },
+    "state_merge": "last_writer_wins"
+  },
+  "dev": {"user_id": 1, "seed_storage": {}}
+}

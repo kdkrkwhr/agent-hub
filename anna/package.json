@@ -1,0 +1,16 @@
+{
+  "name": "agent-hub-radio-anna",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Agent Hub Radio on Anna: AI roles that debate, vote and draft together.",
+  "scripts": {
+    "dev": "anna-app dev --port 5181 --no-llm",
+    "validate": "anna-app validate --strict",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node --test tests/browser/*.browser.mjs"
+  },
+  "devDependencies": {
+    "@anna-ai/cli": "0.1.57",
+    "playwright-core": "1.64.0"
+  }
+}

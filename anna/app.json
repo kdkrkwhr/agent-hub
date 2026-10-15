@@ -1,0 +1,10 @@
+{
+  "slug": "agent-hub-radio",
+  "name": "Agent Hub Radio",
+  "version": "0.4.0",
+  "tagline": "Analyst, critic and editor roles debate, vote and draft with your Anna AI.",
+  "description": "Agent Hub Radio turns your Anna AI into a small team. An analyst, a critic and an editor give independent opinions, debate the open points, vote without seeing each other's choices and draft documents step by step. Pick a temperament and preferred model family for each role; every reply shows the model Anna actually used. Uses your own Anna AI allowance. Model choice follows the models enabled in your Anna settings.",
+  "category": "productivity",
+  "homepage_url": "https://github.com/kdkrkwhr/agent-hub",
+  "support_url": "https://github.com/kdkrkwhr/agent-hub/issues"
+}

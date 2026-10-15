@@ -22,3 +22,4 @@ auth.json
 *-urls.txt
 .DS_Store
 Thumbs.db
+anna/node_modules/

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent Hub Radio</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" type="module"></script>
+</head>
+<body>
+<header class="bar">
+  <h1>Agent Hub Radio</h1>
+  <label class="language"><span data-t="language">언어</span>
+    <select id="language"><option value="ko">한국어</option><option value="en">English</option></select>
+  </label>
+</header>
+<main>
+  <section class="panel" aria-labelledby="settings-title">
+    <h2 id="settings-title" data-t="settings">역할과 모델</h2>
+    <p class="hint" data-t="settingsHint"></p>
+    <form id="settings-form">
+      <div id="roles" class="roles"></div>
+      <button type="submit" data-t="save">저장</button>
+    </form>
+  </section>
+  <p class="soon" data-t="comingSoon"></p>
+</main>
+<p id="notice" role="status" hidden></p>
+</body>
+</html>
