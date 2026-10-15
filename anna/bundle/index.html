@@ -10,12 +10,54 @@
 <body>
 <header class="bar">
   <h1>Agent Hub Radio</h1>
+  <nav id="tabs" class="tabs">
+    <button type="button" data-view="discussion" data-t="tab-discussion" aria-pressed="true">토론</button>
+    <button type="button" data-view="vote" data-t="tab-vote" aria-pressed="false">투표</button>
+    <button type="button" data-view="history" data-t="tab-history" aria-pressed="false">기록</button>
+    <button type="button" data-view="settings" data-t="tab-settings" aria-pressed="false">설정</button>
+  </nav>
   <label class="language"><span data-t="language">언어</span>
     <select id="language"><option value="ko">한국어</option><option value="en">English</option></select>
   </label>
 </header>
 <main>
-  <section class="panel" aria-labelledby="settings-title">
+  <section id="view-discussion" class="panel view" aria-labelledby="discussion-title">
+    <h2 id="discussion-title" data-t="discussionTitle">역할 토론</h2>
+    <p class="hint" data-t="discussionHint"></p>
+    <form id="discussion-form" class="compose">
+      <label><span data-t="request">요청</span><textarea name="request" rows="4" maxlength="4000"></textarea></label>
+      <fieldset class="picks"><legend data-t="participants">참여 역할</legend><div data-picks></div></fieldset>
+      <label class="check"><input type="checkbox" name="detail"><span data-t="detail">자세히 답하기</span></label>
+      <p class="estimate" data-estimate></p>
+      <button type="submit" data-t="start" disabled>토론 시작</button>
+    </form>
+  </section>
+  <section id="view-vote" class="panel view" aria-labelledby="vote-title" hidden>
+    <h2 id="vote-title" data-t="voteTitle">독립 투표</h2>
+    <p class="hint" data-t="voteHint"></p>
+    <form id="vote-form" class="compose">
+      <label><span data-t="passage">지문</span><textarea name="passage" rows="4" maxlength="4000"></textarea></label>
+      <label><span data-t="optionsInput">선택지</span><textarea name="options" rows="4" maxlength="2000"></textarea></label>
+      <fieldset class="picks"><legend data-t="participants">참여 역할</legend><div data-picks></div></fieldset>
+      <p class="estimate" data-estimate></p>
+      <button type="submit" data-t="startVote" disabled>투표 시작</button>
+    </form>
+  </section>
+  <section id="view-history" class="panel view" aria-labelledby="history-title" hidden>
+    <h2 id="history-title" data-t="historyTitle">기록</h2>
+    <label class="check"><input type="checkbox" id="show-archived"><span data-t="showArchived">보관한 기록 보기</span></label>
+    <ul id="thread-list" class="thread-list"></ul>
+  </section>
+  <section id="view-thread" class="panel view" aria-labelledby="thread-title" hidden>
+    <button type="button" id="back" data-t="back">목록으로</button>
+    <h2 id="thread-title"></h2>
+    <p id="thread-meta" class="hint"></p>
+    <div id="thread-actions" class="actions"></div>
+    <ol id="turns" class="turns"></ol>
+    <div id="vote-result" class="vote-result" hidden></div>
+    <textarea id="export-text" class="export-text" rows="10" readonly hidden></textarea>
+  </section>
+  <section id="view-settings" class="panel view" aria-labelledby="settings-title" hidden>
     <h2 id="settings-title" data-t="settings">역할과 모델</h2>
     <p class="hint" data-t="settingsHint"></p>
     <form id="settings-form">
@@ -23,7 +65,6 @@
       <button type="submit" data-t="save" disabled>저장</button>
     </form>
   </section>
-  <p class="soon" data-t="comingSoon"></p>
 </main>
 <p id="notice" role="status" hidden></p>
 </body>

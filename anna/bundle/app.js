@@ -1,139 +1,47 @@
 import {AnnaAppRuntime} from '/static/anna-apps/_sdk/latest/index.js';
 import {createStore} from './store.mjs';
-import {ROLE_IDS, ROLES, TEMPERAMENTS, FAMILIES} from './roles.mjs';
-import {t, setLanguage, getLanguage} from './i18n.mjs';
+import {createAi} from './ai.mjs';
+import {setLanguage, t} from './i18n.mjs';
+import {$, notice, renderText} from './view.mjs';
+import {mountSettings, renderSettings} from './settings-view.mjs';
+import {mountThreads, refreshHistory, renderHistory, renderThread, showView} from './threads-view.mjs';
 
-const $ = selector => document.querySelector(selector);
-let store;
-let settings;
+const ctx = {view: 'discussion', threads: [], thread: null, running: null};
 
-function notice(text) {
-  const element = $('#notice');
-  element.textContent = text;
-  element.hidden = !text;
-}
-
-function option(value, label, selected) {
-  const element = document.createElement('option');
-  element.value = value;
-  element.textContent = label;
-  element.selected = selected;
-  return element;
-}
-
-function field(label, select) {
-  const wrapper = document.createElement('label');
-  const caption = document.createElement('span');
-  caption.textContent = label;
-  wrapper.append(caption, select);
-  return wrapper;
-}
-
-function select(name, entries) {
-  const element = document.createElement('select');
-  element.name = name;
-  element.append(...entries);
-  return element;
-}
-
-function renderText() {
-  document.documentElement.lang = getLanguage();
-  for (const element of document.querySelectorAll('[data-t]')) element.textContent = t(element.dataset.t);
-}
-
-function renderRoles() {
-  const language = getLanguage();
-  const cards = ROLE_IDS.map(id => {
-    const role = settings.roles[id];
-    const models = role.model && !settings.seenModels.includes(role.model) ? [role.model, ...settings.seenModels] : settings.seenModels;
-    const card = document.createElement('fieldset');
-    card.className = `role role-${id}`;
-    card.dataset.role = id;
-    const legend = document.createElement('legend');
-    legend.textContent = ROLES[id].name[language];
-    const persona = document.createElement('p');
-    persona.textContent = ROLES[id].persona[language];
-    const model = select(`${id}-model`, [
-      option('', models.length ? t('noModel') : t('noSeen'), !role.model),
-      ...models.map(name => option(name, name, role.model === name)),
-    ]);
-    model.disabled = !models.length;
-    card.append(
-      legend,
-      persona,
-      field(t('temperament'), select(`${id}-temperament`, Object.keys(TEMPERAMENTS).map(key => option(key, t(key), role.temperament === key)))),
-      field(t('family'), select(`${id}-family`, FAMILIES.map(key => option(key, t(key), role.family === key)))),
-      field(t('model'), model),
-    );
-    return card;
-  });
-  $('#roles').replaceChildren(...cards);
-}
-
-function render() {
+function rerender() {
   renderText();
-  renderRoles();
-}
-
-function readForm() {
-  const data = new FormData($('#settings-form'));
-  return {
-    ...settings,
-    roles: Object.fromEntries(ROLE_IDS.map(id => [id, {
-      temperament: data.get(`${id}-temperament`),
-      family: data.get(`${id}-family`),
-      model: data.get(`${id}-model`) || '',
-    }])),
-  };
-}
-
-async function save(event) {
-  event.preventDefault();
-  const button = $('#settings-form button[type="submit"]');
-  button.disabled = true;
-  try {
-    const {roles} = readForm();
-    settings = await store.updateSettings(current => ({...current, roles}));
-    render();
-    notice(t('saved'));
-  } catch {
-    notice(t('saveFailed'));
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function changeLanguage() {
-  const previous = getLanguage();
-  const {roles} = readForm();
-  setLanguage($('#language').value);
-  const language = getLanguage();
-  settings = {...settings, roles, language};
-  render();
-  try {
-    settings = await store.updateSettings(current => ({...current, roles, language}));
-  } catch {
-    $('#language').value = previous;
-    setLanguage(previous);
-    settings = {...settings, language: previous};
-    render();
-    notice(t('saveFailed'));
-  }
+  renderSettings(ctx);
+  renderHistory(ctx);
+  renderThread(ctx);
 }
 
 async function main() {
   renderText();
   try {
     const anna = await AnnaAppRuntime.connect();
-    store = createStore(anna.storage);
-    settings = await store.loadSettings();
-    setLanguage(settings.language);
-    $('#language').value = settings.language;
-    render();
-    $('#settings-form').addEventListener('submit', save);
-    $('#language').addEventListener('change', changeLanguage);
+    ctx.store = createStore(anna.storage);
+    ctx.ai = createAi(anna.llm);
+    ctx.settings = await ctx.store.loadSettings();
+    ctx.rerender = rerender;
+    ctx.onSettings = () => renderSettings(ctx);
+    setLanguage(ctx.settings.language);
+    $('#language').value = ctx.settings.language;
+    try {
+      ctx.threads = await ctx.store.repairIndex();
+    } catch {
+      ctx.threads = await ctx.store.listThreads().catch(() => []);
+    }
+    for (const tab of document.querySelectorAll('#tabs [data-view]')) {
+      tab.addEventListener('click', () => {
+        showView(ctx, tab.dataset.view);
+        if (tab.dataset.view === 'history') refreshHistory(ctx);
+      });
+    }
+    mountSettings(ctx);
+    mountThreads(ctx);
+    rerender();
+    showView(ctx, 'discussion');
     anna.window.set_title({title: 'Agent Hub Radio'}).catch(() => {});
-    $('#settings-form button[type="submit"]').disabled = false;
     document.body.dataset.ready = 'true';
   } catch {
     notice(t('loadFailed'));
