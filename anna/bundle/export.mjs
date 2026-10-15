@@ -3,10 +3,11 @@ import {tr} from './i18n.mjs';
 import {parseBallot, tally} from './voting.mjs';
 
 const line = text => String(text ?? '').replace(/\s+/g, ' ').trim();
+const code = text => `\`${line(String(text ?? '').replaceAll('`', ''))}\``;
 
 function modelNote(turn, lang) {
-  const parts = [`${tr(lang, 'actualModel')}: ${turn.model ? `\`${line(turn.model)}\`` : tr(lang, 'unknownModel')}`];
-  if (turn.requested) parts.push(`${tr(lang, 'requestedModel')}: \`${line(turn.requested)}\`${modelMismatch(turn) ? ` (${tr(lang, 'mismatch')})` : ''}`);
+  const parts = [`${tr(lang, 'actualModel')}: ${turn.model ? code(turn.model) : tr(lang, 'unknownModel')}`];
+  if (turn.requested) parts.push(`${tr(lang, 'requestedModel')}: ${code(turn.requested)}${modelMismatch(turn) ? ` (${tr(lang, 'mismatch')})` : ''}`);
   return parts.join(' · ');
 }
 

@@ -53,6 +53,11 @@ test('a finished vote exports counts, choices and reasons', () => {
   assert.match(md, /### 비판자 · 기권/);
 });
 
+test('backticks in model names cannot break the code span', () => {
+  const md = toMarkdown({...discussion, turns: [turn('opinion', 'analyst', {model: 'a`b', requested: 'c``d'})]});
+  assert.match(md, /실제 모델: `ab` · 요청: `cd`/);
+});
+
 test('export file names are stable', () => {
   assert.equal(exportName({kind: 'vote', id: 'abc-1'}), 'agent-hub-vote-abc-1.md');
 });
