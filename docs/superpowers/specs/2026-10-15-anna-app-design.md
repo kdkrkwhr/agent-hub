@@ -68,7 +68,7 @@ Anna 번들 CSP는 인라인 스크립트를 막으므로 기존 화면의 인�
 채널·작업마다 참여 역할을 고른다. 역할마다 다음을 설정한다.
 
 - **성향**: 빠름(`speedPriority` 높음), 균형, 깊은 분석(`intelligencePriority` 높음)
-- **계열**: 자동, Claude, GPT, Gemini → `modelPreferences.hints` (예: `{family: "claude"}`; 자동이면 생략)
+- **계열**: 자동, Claude, GPT, Gemini → `modelPreferences.hints` (형식: `[{name: "<모델명>"}, {name: "claude"}]`; 자동이면 생략)
 - **사용해 본 모델**: 응답의 `model` 필드로 받은 실제 모델명(예: `google/gemini-3-flash-preview`)을 설정에 누적하고, 고르면 그 이름을 힌트로 우선 요청한다.
 
 Anna 문서 기준으로 앱은 모델을 강제할 수 없고 모델 목록도 조회할 수 없다. 사용자가 Anna에서 켠 모델 안에서만 선택된다. 따라서:
