@@ -9,6 +9,7 @@ import {mountShell, renderHeader, renderSidebar, selectChannel} from './shell-vi
 import {renderTimeline} from './timeline-view.mjs';
 import {mountComposer, renderComposer} from './composer-view.mjs';
 import {mountBallot} from './ballot-view.mjs';
+import {mountOffice, renderOffice} from './office-view.mjs';
 
 const ctx = {threads: [], channels: [], channel: null, timeline: [], picks: [], running: null};
 
@@ -17,6 +18,7 @@ function render() {
   renderHeader(ctx);
   renderComposer(ctx);
   renderTimeline(ctx);
+  renderOffice(ctx);
 }
 
 function rerender() {
@@ -47,6 +49,7 @@ async function main() {
     mountShell(ctx);
     mountComposer(ctx);
     mountBallot(ctx);
+    mountOffice(ctx);
     renderText();
     renderSettings(ctx);
     const first = allChannels(ctx).find(channel => !channel.archived);

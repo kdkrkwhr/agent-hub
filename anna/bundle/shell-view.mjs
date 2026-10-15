@@ -41,6 +41,8 @@ export async function selectChannel(ctx, id) {
     ctx.channel = id;
     ctx.timeline = [];
     ctx.picks = [...(currentChannel(ctx)?.roles || [])];
+    ctx.officeRoom = null;
+    ctx.officeSelected = null;
     $('#export-text').hidden = true;
   }
   ctx.render();

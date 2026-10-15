@@ -230,6 +230,7 @@ export async function loadTimeline(ctx) {
     ctx.store.saveThread(thread).then(threads => { ctx.threads = threads; }).catch(() => {});
   }
   renderTimeline(ctx, {scroll: true});
+  ctx.renderOffice?.();
 }
 
 export async function run(ctx, thread) {
@@ -252,7 +253,9 @@ export async function run(ctx, thread) {
           warned = true;
           notice(t('saveRetry'));
         }
-        if (ctx.timeline?.includes(current)) updateRun(ctx, current);
+        if (!ctx.timeline?.includes(current)) return;
+        updateRun(ctx, current);
+        ctx.renderOffice?.();
       },
     });
     ctx.settings = {...ctx.settings, seenModels: result.settings.seenModels};

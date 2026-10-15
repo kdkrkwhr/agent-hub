@@ -19,7 +19,7 @@
   <nav id="channel-list" class="channel-list"></nav>
   <div class="aside-foot">
     <button type="button" id="open-settings" class="ghost wide" data-t="modelSettings">모델 설정</button>
-    <small>v0.5.0 · Anna AI</small>
+    <small>v0.6.0 · Anna AI</small>
   </div>
 </aside>
 <div id="scrim" class="scrim"></div>
@@ -34,7 +34,25 @@
       <button type="button" id="close-channel" data-t="closeChannel" disabled>채널 닫기</button>
     </div>
   </header>
+  <nav id="view-tabs" class="view-tabs" role="tablist" hidden>
+    <button type="button" role="tab" data-view="chat" data-t="tabChat" aria-selected="true">대화</button>
+    <button type="button" role="tab" data-view="office" data-t="tabOffice" aria-selected="false">사무실</button>
+  </nav>
   <section id="feed" class="feed" aria-live="polite"></section>
+  <section id="office" class="office" hidden>
+    <div class="office-head">
+      <div class="segmented" role="group" data-ta="tabOffice">
+        <button type="button" data-room-tab="office" data-t="workOffice" aria-pressed="true">업무 사무실</button>
+        <button type="button" data-room-tab="vote" data-t="voteRoom" aria-pressed="false">투표실</button>
+      </div>
+      <p id="office-caption" class="office-caption"></p>
+      <div id="office-status" class="office-status"></div>
+    </div>
+    <div class="office-body">
+      <svg id="office-map" class="office-map" viewBox="0 0 1000 640" role="group" preserveAspectRatio="xMidYMid meet"></svg>
+      <aside id="office-card" class="office-card" aria-live="polite" hidden></aside>
+    </div>
+  </section>
   <textarea id="export-text" class="export-text" rows="8" readonly hidden></textarea>
   <form id="composer" class="composer">
     <p id="composer-closed" class="closed-note" data-t="closedChannel" hidden></p>
