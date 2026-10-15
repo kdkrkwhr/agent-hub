@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {exportName, toMarkdown} from '../bundle/export.mjs';
+import {channelExportName, channelMarkdown, exportName, toMarkdown} from '../bundle/export.mjs';
 
 const turn = (step, role, extra = {}) => ({step, role, status: 'done', text: `${role} ${step} 본문`, model: 'google/gemini-3-flash-preview', requested: '', error: '', ...extra});
 const discussion = {
@@ -60,4 +60,13 @@ test('backticks in model names cannot break the code span', () => {
 
 test('export file names are stable', () => {
   assert.equal(exportName({kind: 'vote', id: 'abc-1'}), 'agent-hub-vote-abc-1.md');
+});
+
+test('a channel exports its threads under one title with nested headings', () => {
+  const second = {...discussion, id: 'd2', title: '두 번째', status: 'done', turns: []};
+  const md = channelMarkdown({id: 'c1', title: '제품 개선'}, [discussion, second], 'ko');
+  assert.match(md, /^# 제품 개선\n\n## 점심 메뉴\n/);
+  assert.match(md, /\n### 요청\n/);
+  assert.match(md, /\n---\n\n## 두 번째\n/);
+  assert.equal(channelExportName({id: 'c1'}), 'agent-hub-channel-c1.md');
 });

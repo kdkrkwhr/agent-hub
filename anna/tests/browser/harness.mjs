@@ -39,4 +39,35 @@ export async function setup(t, {faults = {}, kv = {}, viewport = {width: 1180, h
   return page;
 }
 export const ready = page => page.waitForSelector('body[data-ready="true"]');
-export const openTab = (page, view) => page.click(`#tabs [data-view="${view}"]`);
+export const llm = page => page.evaluate(() => window.hostTest.calls.filter(c => c.method === 'llm.stream'));
+export const fault = (page, values) => page.evaluate(values => Object.assign(window.hostTest.faults, values), values);
+export const noticeText = page => page.locator('#notice').textContent();
+
+export async function newChannel(page) {
+  const before = await page.locator('#channel-list .channel').count();
+  if (await page.locator('#feed .welcome-new').count()) await page.click('#feed .welcome-new');
+  else {
+    if (await page.locator('#menu').isVisible()) await page.click('#menu');
+    await page.click('#new-channel');
+  }
+  await page.waitForFunction(count => document.querySelectorAll('#channel-list .channel').length > count && !document.querySelector('#send').disabled, before);
+}
+
+export async function discuss(page, text = '점심 메뉴를 정해 줘') {
+  await page.fill('#composer textarea[name="request"]', text);
+  await page.click('#send');
+}
+
+export async function vote(page, {passage = '점심은 무엇으로?', options = ['짜장', '짬뽕']} = {}) {
+  await page.click('#open-ballot');
+  await page.fill('#ballot-form textarea[name="passage"]', passage);
+  for (const [index, text] of options.entries()) {
+    if (index >= 2) await page.click('#add-option');
+    await page.fill(`#ballot-options li:nth-child(${index + 1}) input`, text);
+  }
+  await page.click('#ballot-form button[type="submit"]');
+}
+
+export const lastRun = page => page.locator('#feed .run').last();
+export const runStatus = (page, status) => page.waitForSelector(`#feed .run:last-child[data-status="${status}"]`);
+export const openSettings = page => page.click('#settings-button');

@@ -66,3 +66,10 @@ export function toMarkdown(thread, lang = thread.language === 'en' ? 'en' : 'ko'
 }
 
 export const exportName = thread => `agent-hub-${thread.kind}-${thread.id}.md`;
+
+export function channelMarkdown(channel, threads, lang) {
+  const parts = threads.map(thread => toMarkdown(thread, lang).replace(/^(#+) /gm, '#$1 '));
+  return [`# ${line(channel.title)}`, '', parts.join('\n\n---\n\n')].join('\n');
+}
+
+export const channelExportName = channel => `agent-hub-channel-${channel.id}.md`;

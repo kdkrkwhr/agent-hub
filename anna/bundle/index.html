@@ -8,64 +8,95 @@
 <script src="app.js" type="module"></script>
 </head>
 <body>
-<header class="bar">
-  <h1>Agent Hub Radio</h1>
-  <nav id="tabs" class="tabs">
-    <button type="button" data-view="discussion" data-t="tab-discussion" aria-pressed="true">토론</button>
-    <button type="button" data-view="vote" data-t="tab-vote" aria-pressed="false">투표</button>
-    <button type="button" data-view="history" data-t="tab-history" aria-pressed="false">기록</button>
-    <button type="button" data-view="settings" data-t="tab-settings" aria-pressed="false">설정</button>
-  </nav>
-  <label class="language"><span data-t="language">언어</span>
+<aside id="sidebar" class="sidebar">
+  <div class="brand">
+    <img src="logo.svg" alt="" class="logo" width="36" height="36">
+    <div><span>AGENT HUB <b>RADIO</b></span><small data-t="brandSub">역할 팀, 하나의 채널</small></div>
+  </div>
+  <button type="button" id="new-channel" class="primary wide" data-t="newChannel" disabled>+ 새 채널</button>
+  <div class="section-label"><span data-t="channels">채널</span><span id="channel-count">0</span></div>
+  <label class="check small"><input type="checkbox" id="show-closed"><span data-t="showClosed">닫힌 채널 표시</span></label>
+  <nav id="channel-list" class="channel-list"></nav>
+  <div class="aside-foot">
+    <button type="button" id="open-settings" class="ghost wide" data-t="modelSettings">모델 설정</button>
+    <small>v0.5.0 · Anna AI</small>
+  </div>
+</aside>
+<div id="scrim" class="scrim"></div>
+<main id="main">
+  <header class="topbar">
+    <button type="button" id="menu" class="icon" data-ta="openMenu" aria-label="채널 목록 열기">☰</button>
+    <h1 id="channel-title">Agent Hub Radio</h1>
+    <div class="top-actions">
+      <button type="button" id="settings-button" data-t="modelSettings">모델 설정</button>
+      <button type="button" id="rename" data-t="rename" disabled>이름 변경</button>
+      <button type="button" id="export" data-t="exportChannel" disabled>MD 저장</button>
+      <button type="button" id="close-channel" data-t="closeChannel" disabled>채널 닫기</button>
+    </div>
+  </header>
+  <section id="feed" class="feed" aria-live="polite"></section>
+  <textarea id="export-text" class="export-text" rows="8" readonly hidden></textarea>
+  <form id="composer" class="composer">
+    <p id="composer-closed" class="closed-note" data-t="closedChannel" hidden></p>
+    <div class="composer-tools">
+      <div id="role-chips" class="chips" role="group" data-ta="voters"></div>
+      <label class="check small"><input type="checkbox" name="detail"><span data-t="detail">자세히</span></label>
+      <span id="estimate" class="estimate"></span>
+      <button type="button" id="open-ballot" class="ghost" data-t="secretVote" disabled>독립 비밀 투표</button>
+    </div>
+    <div class="composer-row">
+      <textarea name="request" rows="2" maxlength="4000" data-tp="placeholder" data-ta="request" placeholder="역할들에게 요청하세요." aria-label="요청"></textarea>
+      <button type="submit" id="send" class="primary" data-t="send" disabled>보내기</button>
+    </div>
+    <div class="composer-foot"><small data-t="enterHint">Enter 전송 · Shift+Enter 줄바꿈</small><p id="notice" class="notice" role="status" data-notice></p></div>
+  </form>
+</main>
+
+<dialog id="ballot-dialog" class="dialog">
+  <form id="ballot-form">
+    <p class="eyebrow" data-t="ballotEyebrow">INDEPENDENT BALLOT</p>
+    <h2 data-t="ballotTitle">같은 지문, 각자의 판단</h2>
+    <p class="hint" data-t="ballotHint"></p>
+    <label class="field"><span data-t="passage">판단할 지문</span><textarea name="passage" rows="4" maxlength="4000"></textarea></label>
+    <div class="options-head"><strong data-t="optionsTitle">선택지</strong><button type="button" id="add-option" data-t="addOption">+ 선택지 추가</button></div>
+    <ol id="ballot-options" class="ballot-options"></ol>
+    <p class="hint small" data-t="optionsHint"></p>
+    <fieldset class="voters"><legend data-t="voters">투표 참여자</legend><div id="ballot-voters"></div></fieldset>
+    <p class="estimate" id="ballot-estimate"></p>
+    <p class="notice" data-notice role="status"></p>
+    <div class="dialog-actions">
+      <button type="button" id="ballot-cancel" data-t="goBack">돌아가기</button>
+      <button type="submit" class="primary" data-t="startBallot">비밀 투표 시작</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settings-dialog" class="dialog wide-dialog">
+  <div class="dialog-head">
+    <h2 id="settings-title" data-t="settings">역할과 모델</h2>
+    <button type="button" id="settings-close" data-t="close">닫기</button>
+  </div>
+  <p class="hint" data-t="settingsHint"></p>
+  <label class="field inline"><span data-t="language">언어</span>
     <select id="language"><option value="ko">한국어</option><option value="en">English</option></select>
   </label>
-</header>
-<main>
-  <section id="view-discussion" class="panel view" aria-labelledby="discussion-title">
-    <h2 id="discussion-title" data-t="discussionTitle">역할 토론</h2>
-    <p class="hint" data-t="discussionHint"></p>
-    <form id="discussion-form" class="compose">
-      <label><span data-t="request">요청</span><textarea name="request" rows="4" maxlength="4000"></textarea></label>
-      <fieldset class="picks"><legend data-t="participants">참여 역할</legend><div data-picks></div></fieldset>
-      <label class="check"><input type="checkbox" name="detail"><span data-t="detail">자세히 답하기</span></label>
-      <p class="estimate" data-estimate></p>
-      <button type="submit" data-t="start" disabled>토론 시작</button>
-    </form>
-  </section>
-  <section id="view-vote" class="panel view" aria-labelledby="vote-title" hidden>
-    <h2 id="vote-title" data-t="voteTitle">독립 투표</h2>
-    <p class="hint" data-t="voteHint"></p>
-    <form id="vote-form" class="compose">
-      <label><span data-t="passage">지문</span><textarea name="passage" rows="4" maxlength="4000"></textarea></label>
-      <label><span data-t="optionsInput">선택지</span><textarea name="options" rows="4" maxlength="2000"></textarea></label>
-      <fieldset class="picks"><legend data-t="participants">참여 역할</legend><div data-picks></div></fieldset>
-      <p class="estimate" data-estimate></p>
-      <button type="submit" data-t="startVote" disabled>투표 시작</button>
-    </form>
-  </section>
-  <section id="view-history" class="panel view" aria-labelledby="history-title" hidden>
-    <h2 id="history-title" data-t="historyTitle">기록</h2>
-    <label class="check"><input type="checkbox" id="show-archived"><span data-t="showArchived">보관한 기록 보기</span></label>
-    <ul id="thread-list" class="thread-list"></ul>
-  </section>
-  <section id="view-thread" class="panel view" aria-labelledby="thread-title" hidden>
-    <button type="button" id="back" data-t="back">목록으로</button>
-    <h2 id="thread-title"></h2>
-    <p id="thread-meta" class="hint"></p>
-    <div id="thread-actions" class="actions"></div>
-    <ol id="turns" class="turns"></ol>
-    <div id="vote-result" class="vote-result" hidden></div>
-    <textarea id="export-text" class="export-text" rows="10" readonly hidden></textarea>
-  </section>
-  <section id="view-settings" class="panel view" aria-labelledby="settings-title" hidden>
-    <h2 id="settings-title" data-t="settings">역할과 모델</h2>
-    <p class="hint" data-t="settingsHint"></p>
-    <form id="settings-form">
-      <div id="roles" class="roles"></div>
-      <button type="submit" data-t="save" disabled>저장</button>
-    </form>
-  </section>
-</main>
-<p id="notice" role="status"></p>
+  <form id="settings-form">
+    <div id="roles" class="roles"></div>
+    <p class="notice" data-notice role="status"></p>
+    <div class="dialog-actions"><button type="submit" class="primary" data-t="save" disabled>저장</button></div>
+  </form>
+</dialog>
+
+<dialog id="rename-dialog" class="dialog">
+  <form id="rename-form">
+    <h2 data-t="rename">이름 변경</h2>
+    <label class="field"><span data-t="channelTitle">채널 이름</span><input name="title" maxlength="60" autocomplete="off"></label>
+    <p class="notice" data-notice role="status"></p>
+    <div class="dialog-actions">
+      <button type="button" id="rename-cancel" data-t="cancel">취소</button>
+      <button type="submit" class="primary" data-t="save">저장</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>

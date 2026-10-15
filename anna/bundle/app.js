@@ -2,19 +2,27 @@ import {AnnaAppRuntime} from '/static/anna-apps/_sdk/latest/index.js';
 import {createStore} from './store.mjs';
 import {createAi} from './ai.mjs';
 import {setLanguage, t} from './i18n.mjs';
-import {$, later, notice, renderText} from './view.mjs';
+import {$, notice, renderText} from './view.mjs';
+import {allChannels} from './context.mjs';
 import {mountSettings, refreshModels, renderSettings} from './settings-view.mjs';
-import {mountThreads, refreshHistory, renderHistory, renderThread, showView} from './threads-view.mjs';
-import {mountCompose, renderPicks} from './compose-view.mjs';
+import {mountShell, renderHeader, renderSidebar, selectChannel} from './shell-view.mjs';
+import {renderTimeline} from './timeline-view.mjs';
+import {mountComposer, renderComposer} from './composer-view.mjs';
+import {mountBallot} from './ballot-view.mjs';
 
-const ctx = {view: 'discussion', threads: [], thread: null, running: null};
+const ctx = {threads: [], channels: [], channel: null, timeline: [], picks: [], running: null};
+
+function render() {
+  renderSidebar(ctx);
+  renderHeader(ctx);
+  renderComposer(ctx);
+  renderTimeline(ctx);
+}
 
 function rerender() {
   renderText();
   renderSettings(ctx);
-  renderPicks();
-  renderHistory(ctx);
-  renderThread(ctx);
+  render();
 }
 
 async function main() {
@@ -24,6 +32,7 @@ async function main() {
     ctx.store = createStore(anna.storage);
     ctx.ai = createAi(anna.llm);
     ctx.settings = await ctx.store.loadSettings();
+    ctx.render = render;
     ctx.rerender = rerender;
     ctx.onSettings = () => refreshModels(ctx);
     setLanguage(ctx.settings.language);
@@ -33,17 +42,16 @@ async function main() {
     } catch {
       ctx.threads = await ctx.store.listThreads().catch(() => []);
     }
-    for (const tab of document.querySelectorAll('#tabs [data-view]')) {
-      tab.addEventListener('click', () => {
-        showView(ctx, tab.dataset.view);
-        if (tab.dataset.view === 'history') later(refreshHistory(ctx));
-      });
-    }
+    ctx.channels = await ctx.store.listChannels().catch(() => []);
     mountSettings(ctx);
-    mountThreads(ctx);
-    mountCompose(ctx);
-    rerender();
-    showView(ctx, 'discussion');
+    mountShell(ctx);
+    mountComposer(ctx);
+    mountBallot(ctx);
+    renderText();
+    renderSettings(ctx);
+    const first = allChannels(ctx).find(channel => !channel.archived);
+    if (first) await selectChannel(ctx, first.id);
+    else render();
     anna.window.set_title({title: 'Agent Hub Radio'}).catch(() => {});
     document.body.dataset.ready = 'true';
   } catch {

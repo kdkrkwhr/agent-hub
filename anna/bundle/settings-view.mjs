@@ -61,6 +61,16 @@ export function refreshModels(ctx) {
 }
 
 export function mountSettings(ctx) {
+  const dialog = $('#settings-dialog');
+  for (const opener of [$('#open-settings'), $('#settings-button')]) {
+    opener.addEventListener('click', () => {
+      document.body.classList.remove('drawer-open');
+      notice('');
+      renderSettings(ctx);
+      dialog.showModal();
+    });
+  }
+  $('#settings-close').addEventListener('click', () => dialog.close());
   const form = $('#settings-form');
   const submit = form.querySelector('button[type="submit"]');
   const picker = $('#language');

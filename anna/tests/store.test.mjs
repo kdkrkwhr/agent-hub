@@ -147,6 +147,33 @@ test('loading or deleting an invalid id is rejected without storage access', asy
   assert.deepEqual(m.log, []);
 });
 
+test('index entries keep the channel and creation time', async () => {
+  const m = memory();
+  const store = createStore(m.storage);
+  await store.saveThread(thread('a', 2, {channel: 'c1', created: 1}));
+  await store.saveThread(thread('b', 3));
+  assert.deepEqual(m.kv.threads.map(t => [t.id, t.channel, t.created]), [['b', '', 3], ['a', 'c1', 1]]);
+});
+
+test('channels are saved by id, cleaned and listed', async () => {
+  const m = slow(memory({channels: [{id: 'bad/id'}, {id: 'old', title: 'Old'}]}));
+  const store = createStore(m.storage);
+  assert.deepEqual((await store.listChannels()).map(c => c.id), ['old']);
+  await Promise.all([
+    store.saveChannel({id: 'c1', title: ' 첫 채널 ', roles: ['critic'], updated: 5}),
+    store.saveChannel({id: 'c2', title: '둘째', updated: 6}),
+  ]);
+  const saved = await store.saveChannel({id: 'c1', title: '바꾼 이름', roles: ['critic'], archived: true, updated: 7});
+  assert.deepEqual(saved.map(c => [c.id, c.title, c.archived]), [['old', 'Old', false], ['c1', '바꾼 이름', true], ['c2', '둘째', false]]);
+  assert.deepEqual(m.kv.channels.find(c => c.id === 'c1').roles, ['critic']);
+  await assert.rejects(store.saveChannel({id: '../x', title: 'x'}), /Invalid channel id/);
+});
+
+test('missing or broken channel lists read as empty', async () => {
+  assert.deepEqual(await createStore(memory().storage).listChannels(), []);
+  assert.deepEqual(await createStore(memory({channels: 'oops'}).storage).listChannels(), []);
+});
+
 test('repair skips listing items without a key', async () => {
   const m = memory({[threadKey('a')]: thread('a', 1)});
   const list = m.storage.list;

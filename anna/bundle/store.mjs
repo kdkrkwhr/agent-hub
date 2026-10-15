@@ -1,7 +1,9 @@
 import {normalizeSettings} from './roles.mjs';
+import {normalizeChannel} from './channels.mjs';
 
 export const SETTINGS_KEY = 'settings';
 export const INDEX_KEY = 'threads';
+export const CHANNELS_KEY = 'channels';
 export const threadKey = id => `thread/${id}`;
 const THREAD_PATTERN = /^thread\/([^/]+)$/;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -16,8 +18,10 @@ export function summary(thread) {
     title: String(thread.title || '').slice(0, 80),
     kind: thread.kind,
     status: thread.status,
+    created: thread.created ?? thread.updated,
     updated: thread.updated,
     archived: thread.archived === true,
+    channel: typeof thread.channel === 'string' ? thread.channel : '',
   };
 }
 
@@ -37,6 +41,10 @@ export function createStore(storage) {
   async function listThreads() {
     const value = await read(INDEX_KEY);
     return Array.isArray(value) ? value : [];
+  }
+  async function listChannels() {
+    const value = await read(CHANNELS_KEY);
+    return Array.isArray(value) ? value.map(normalizeChannel).filter(Boolean) : [];
   }
   async function writeIndex(items) {
     const sorted = [...items].sort((a, b) => (Number(b.updated) || 0) - (Number(a.updated) || 0));
@@ -61,6 +69,19 @@ export function createStore(storage) {
       return serial(async () => writeSettings(change(await loadSettings())));
     },
     listThreads,
+    listChannels,
+    saveChannel(channel) {
+      const value = normalizeChannel(channel);
+      if (!value) return Promise.reject(new Error('Invalid channel id'));
+      return serial(async () => {
+        const items = await listChannels();
+        const index = items.findIndex(item => item.id === value.id);
+        if (index < 0) items.push(value);
+        else items[index] = value;
+        await storage.set({key: CHANNELS_KEY, value: items});
+        return items;
+      });
+    },
     async loadThread(id) {
       assertId(id);
       return read(threadKey(id));
