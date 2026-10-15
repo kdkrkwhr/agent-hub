@@ -39,6 +39,63 @@ test('abort stops a stalled stream and keeps the partial text', async () => {
   assert.equal(closed, true);
 });
 
+test('falls back to complete when stream throws or its first frame rejects as unsupported', async () => {
+  const complete = async () => ({content: {text: 'done'}, model: 'm'});
+  const throwing = {stream() { throw {code: -32601}; }, complete};
+  assert.deepEqual(await createAi(throwing).speak(ask), {text: 'done', model: 'm'});
+  const rejecting = {stream() { return {[Symbol.asyncIterator]: () => ({next: () => Promise.reject({code: 'not_implemented'})})}; }, complete};
+  assert.deepEqual(await createAi(rejecting).speak(ask), {text: 'done', model: 'm'});
+});
+
+test('abort applies to the complete fallback', async () => {
+  const controller = new AbortController();
+  const llm = {complete: () => new Promise(resolve => setTimeout(() => resolve({content: {text: 'late'}, model: 'm'}), 50))};
+  setTimeout(() => controller.abort(), 10);
+  await assert.rejects(createAi(llm).speak({...ask, signal: controller.signal}), e => e instanceof AiError && e.kind === 'aborted' && e.partial === '');
+});
+
+test('abort listeners are released after each call', async () => {
+  const listeners = new Set();
+  const signal = {aborted: false, addEventListener: (type, fn) => listeners.add(fn), removeEventListener: (type, fn) => listeners.delete(fn)};
+  const ai = createAi(streamOf([{event: 'complete', content: {text: 'ok'}, model: 'm'}]));
+  for (let i = 0; i < 3; i++) await ai.speak({...ask, signal});
+  assert.equal(listeners.size, 0);
+});
+
+test('abort wins over a frame that already arrived', async () => {
+  const controller = new AbortController();
+  const llm = {stream() {
+    return {[Symbol.asyncIterator]() { let n = 0; return {
+      next() {
+        if (n++ === 0) return Promise.resolve({value: {event: 'model_token', text: 'part'}, done: false});
+        controller.abort();
+        return Promise.resolve({value: {event: 'complete', content: {text: 'whole'}, model: 'm'}, done: false});
+      },
+      return: async () => ({done: true}),
+    }; }};
+  }};
+  await assert.rejects(createAi(llm).speak({...ask, signal: controller.signal}), e => e instanceof AiError && e.kind === 'aborted' && e.partial === 'part');
+});
+
+test('abort from a timer stops a stalled stream', async () => {
+  const controller = new AbortController();
+  let closed = false;
+  const llm = {stream() {
+    return {[Symbol.asyncIterator]() { let sent = false; return {
+      next: () => sent ? new Promise(() => {}) : (sent = true, Promise.resolve({value: {event: 'model_token', text: 'part'}, done: false})),
+      return: async () => { closed = true; return {done: true}; },
+    }; }};
+  }};
+  setTimeout(() => controller.abort(), 10);
+  await assert.rejects(createAi(llm).speak({...ask, signal: controller.signal}), e => e instanceof AiError && e.kind === 'aborted' && e.partial === 'part');
+  assert.equal(closed, true);
+});
+
+test('explicit codes and AbortError are classified before message text', () => {
+  assert.equal(classify({code: 'APP_PROVIDER_ERROR', message: 'insufficient context window'}), 'provider');
+  assert.equal(classify(Object.assign(new Error('x'), {name: 'AbortError'})), 'aborted');
+});
+
 test('errors are classified for the user', async () => {
   assert.equal(classify({code: 'APP_QUOTA_EXCEEDED'}), 'quota');
   assert.equal(classify(new Error('insufficient credit')), 'quota');

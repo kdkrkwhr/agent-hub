@@ -12,8 +12,11 @@ const UNSUPPORTED = new Set([-32601, 'not_implemented', 'unknown_method']);
 export function classify(error) {
   const code = error?.code;
   const text = String(error?.message || '');
-  if (code === 'APP_QUOTA_EXCEEDED' || /quota|credit|insufficient/i.test(text)) return 'quota';
-  if (code === 'APP_PROVIDER_ERROR' || /no eligible model/i.test(text)) return 'provider';
+  if (error?.name === 'AbortError') return 'aborted';
+  if (code === 'APP_QUOTA_EXCEEDED') return 'quota';
+  if (code === 'APP_PROVIDER_ERROR') return 'provider';
+  if (/quota|credit|insufficient/i.test(text)) return 'quota';
+  if (/no eligible model/i.test(text)) return 'provider';
   if (/timed? ?out/i.test(text)) return 'timeout';
   return 'unavailable';
 }
@@ -35,24 +38,38 @@ export function createAi(llm) {
     if (signal?.aborted) throw new AiError('aborted', 'aborted');
     let text = '';
     let iterator = null;
+    let onAbort;
+    const aborted = new Promise((_, reject) => {
+      onAbort = () => reject(new AiError('aborted', 'aborted'));
+      signal?.addEventListener('abort', onAbort, {once: true});
+    });
+    aborted.catch(() => {});
+    const raced = promise => signal ? Promise.race([promise, aborted]) : promise;
+    const fallback = error => !text && UNSUPPORTED.has(error?.code);
     try {
-      if (typeof llm.stream !== 'function') return await viaComplete(request);
-      iterator = llm.stream(request)[Symbol.asyncIterator]();
-      const aborted = new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new AiError('aborted', 'aborted')), {once: true}));
-      aborted.catch(() => {});
+      if (typeof llm.stream !== 'function') return await raced(viaComplete(request));
+      let frame;
+      try {
+        iterator = llm.stream(request)[Symbol.asyncIterator]();
+        frame = await raced(iterator.next());
+      } catch (error) {
+        if (!fallback(error)) throw error;
+        return await raced(viaComplete(request));
+      }
       while (true) {
-        const {value: event, done} = await (signal ? Promise.race([iterator.next(), aborted]) : iterator.next());
+        if (signal?.aborted) throw new AiError('aborted', 'aborted');
+        const {value: event, done} = frame;
         if (done) break;
         if (event?.event === 'model_token' && event.text) {
           text += event.text;
           onToken(text);
-          if (signal?.aborted) throw new AiError('aborted', 'aborted');
         } else if (event?.event === 'complete') {
           return {text: event.content?.text || text, model: event.model || ''};
         } else if (event?.event === 'error') {
-          if (!text && UNSUPPORTED.has(event.code)) return await viaComplete(request);
+          if (fallback(event)) return await raced(viaComplete(request));
           throw Object.assign(new Error(event.message || 'stream failed'), {code: event.code});
         }
+        frame = await raced(iterator.next());
       }
       throw Object.assign(new Error('stream ended without a reply'), {code: 'stream_closed'});
     } catch (error) {
@@ -62,6 +79,7 @@ export function createAi(llm) {
       }
       throw new AiError(classify(error), error?.message || 'AI unavailable', text);
     } finally {
+      signal?.removeEventListener('abort', onAbort);
       iterator?.return?.().catch?.(() => {});
     }
   }
