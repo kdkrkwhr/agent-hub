@@ -24,6 +24,8 @@ class InstanceLock:
     def __exit__(self,*args):self.file.close()
 
 def main():
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):stream.reconfigure(errors='replace')
     if len(sys.argv)>1 and sys.argv[1]=='chat':
         from .cli import main as chat_main
         return chat_main(sys.argv[2:])

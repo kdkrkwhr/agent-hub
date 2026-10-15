@@ -1,0 +1,45 @@
+name: Anna app
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anna-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Anna / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: anna
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked tooling
+        run: npm ci --ignore-scripts
+      - name: Validate app manifest
+        run: npm run validate
+      - name: Unit tests
+        run: npm test
+      - name: Install browser
+        run: npx playwright-core install chromium
+      - name: Browser tests
+        env:
+          ANNA_BROWSER_CHANNEL: chromium
+        run: npm run test:browser
