@@ -38,7 +38,7 @@ const runtime = {
     stream(request) {
       const n = ++streams;
       calls.push({method: 'llm.stream', system: request.systemPrompt, text: request.messages?.[0]?.content?.text || '', hints: request.modelPreferences?.hints || []});
-      const reply = /JSON/.test(request.systemPrompt) ? '{"choice":"A","reason":"가까워요","concern":"없음"}' : `응답 ${n}`;
+      const reply = faults.emptyAt === n ? '' : /JSON/.test(request.systemPrompt) ? '{"choice":"A","reason":"가까워요","concern":"없음"}' : faults.priorityReply && /## /.test(request.systemPrompt) ? faults.priorityReply : `응답 ${n}`;
       return (async function* () {
         await null;
         if (faults.quota) {
@@ -51,6 +51,7 @@ const runtime = {
           yield {event: 'model_token', text};
         }
         if (faults.stallAt === n) await new Promise(() => {});
+        if (faults.saveAfterReplyAt === n) faults.save = true;
         yield {event: 'complete', content: {text: reply}, model: 'mock/gemini-test'};
       })();
     },

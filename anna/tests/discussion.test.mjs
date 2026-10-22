@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {canSkip, createDiscussion, discussionPlan, discussionSteps} from '../bundle/discussion.mjs';
-import {newId, runThread, settleInterrupted, skipTurn} from '../bundle/runner.mjs';
+import {newId, runThread, saveThreadOnly, settleInterrupted, skipTurn} from '../bundle/runner.mjs';
 import {AiError} from '../bundle/ai.mjs';
 import {defaultSettings} from '../bundle/roles.mjs';
 
@@ -117,13 +117,84 @@ test('a skipped role is left out and the run continues; the final cannot be skip
   assert.equal(canSkip(thread.turns[3]), true);
 });
 
-test('save failures are reported and retried on the next save', async () => {
+test('a failed preflight save prevents every AI call until explicitly saved and resumed', async () => {
   const flags = [];
   const store = fakeStore({failSaves: 1});
-  const result = await run(lunch(), fakeAi(), store, {onUpdate: (thread, {saveFailed}) => flags.push(saveFailed)});
+  const thread = lunch(), ai = fakeAi();
+  const result = await run(thread, ai, store, {onUpdate: (thread, {saveFailed}) => flags.push(saveFailed)});
   assert.ok(flags.includes(true));
-  assert.equal(result.saveFailed, false);
+  assert.equal(result.saveFailed, true);
+  assert.equal(ai.calls.length, 0);
+  assert.equal(thread.turns[0].status, 'pending');
+  await run(thread, ai, store);
+  assert.equal(ai.calls.length, 0, 'ordinary retry cannot bypass a pending save');
+  assert.equal((await saveThreadOnly({thread, store})).saved, true);
+  assert.equal(ai.calls.length, 0);
+  await run(thread, ai, store);
+  assert.equal(ai.calls.length, 9);
   assert.equal(store.saved.at(-1).status, 'done');
+});
+
+test('persistent storage failure after a response stops at one AI call and save-only recovery preserves it', async () => {
+  const thread = lunch(), store = fakeStore(), ai = fakeAi();
+  const original = store.saveThread;
+  let writes = 0, fail = true;
+  store.saveThread = async value => {
+    if (++writes >= 2 && fail) throw new Error('persistent failure');
+    return original(value);
+  };
+  const result = await run(thread, ai, store);
+  assert.equal(result.saveFailed, true);
+  assert.equal(ai.calls.length, 1);
+  assert.equal(thread.turns[0].text, 'reply 1');
+  assert.equal(thread.turns[0].status, 'done');
+  assert.equal(thread.status, 'stopped');
+  assert.equal((await saveThreadOnly({thread, store})).saved, false);
+  assert.equal(ai.calls.length, 1);
+  fail = false;
+  await saveThreadOnly({thread, store});
+  assert.equal(ai.calls.length, 1);
+  assert.equal(store.saved.at(-1).turns[0].text, 'reply 1');
+  await run(thread, ai, store);
+  assert.equal(ai.calls.length, 9);
+  assert.equal(thread.turns[0].text, 'reply 1');
+});
+
+test('an empty or overlong reply stops instead of completing the discussion', async () => {
+  for (const [text, expected] of [['  \n', 'empty'], ['x'.repeat(8001), 'incomplete']]) {
+    const ai = fakeAi(() => ({text, model: MODEL}));
+    const {thread} = await run(lunch(), ai, fakeStore());
+    assert.equal(ai.calls.length, 1);
+    assert.equal(thread.status, 'failed');
+    assert.equal(thread.turns[0].error, expected);
+    assert.ok(thread.turns[0].text.length <= 8000);
+  }
+});
+
+test('every AI call has a persisted in-flight marker and no call begins after abort', async () => {
+  const store = fakeStore(), thread = lunch(), controller = new AbortController();
+  const ai = fakeAi((n) => {
+    const saved = store.saved.at(-1);
+    assert.equal(saved.status, 'running');
+    assert.equal(saved.turns[n - 1].status, 'running');
+    controller.abort();
+  });
+  await run(thread, ai, store, {signal: controller.signal});
+  assert.equal(ai.calls.length, 1);
+  assert.equal(thread.status, 'stopped');
+});
+
+test('quick priority review gathers independent opinions then synthesises in four calls', async () => {
+  const thread = createDiscussion({id: 'quick', request: 'Build notes before themes?', roles: ['analyst', 'critic', 'editor'], mode: 'quick', purpose: 'priority', language: 'en'});
+  const ai = fakeAi();
+  await run(thread, ai, fakeStore());
+  assert.equal(ai.calls.length, 4);
+  assert.deepEqual(thread.turns.map(turn => turn.step), ['opinion', 'opinion', 'opinion', 'final']);
+  for (const call of ai.calls.slice(0, 3)) assert.doesNotMatch(call.messages[0].text, /reply/);
+  assert.match(ai.calls[3].messages[0].text, /reply 1[\s\S]*reply 2[\s\S]*reply 3/);
+  assert.match(ai.calls[3].system, /## Build first[\s\S]*## Defer[\s\S]*## Next action/);
+  assert.match(ai.calls[3].system, /Do not invent/);
+  assert.equal(discussionSteps(['analyst', 'critic'], 'quick').length, 3);
 });
 
 test('unexpected errors become unavailable failures', async () => {

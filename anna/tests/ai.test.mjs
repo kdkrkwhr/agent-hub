@@ -8,6 +8,23 @@ const streamOf = (events, calls = []) => ({
 });
 const ask = {system: 'sys', messages: [{role: 'user', text: 'hi'}], preferences: {speedPriority: 0.5}};
 
+test('an unsupported stream is probed only once per connected runtime', async () => {
+  let streams = 0, completes = 0;
+  const ai = createAi({stream() { streams++; throw {code: 'permission_denied'}; }, async complete() { completes++; return {content: {text: 'ok'}, model: 'm'}; }});
+  await ai.speak(ask);
+  await ai.speak(ask);
+  assert.deepEqual([streams, completes], [1, 2]);
+});
+
+test('limited replies retain their partial result and never become successful completions', async () => {
+  for (const stopReason of ['max_tokens', 'maxTokens', 'length', 'content_filter', 'contentFilter', 'toolUse']) {
+    const result = {content: {text: 'partial'}, model: 'm', stopReason};
+    for (const llm of [{complete: async () => result}, streamOf([{event: 'complete', ...result}])]) {
+      await assert.rejects(createAi(llm).speak(ask), error => error.kind === 'incomplete' && error.partial === 'partial');
+    }
+  }
+});
+
 test('streams tokens and returns the model Anna actually used', async () => {
   const calls = [], seen = [];
   const ai = createAi(streamOf([{event: 'model_token', text: 'Hel'}, {event: 'model_token', text: 'lo'}, {event: 'complete', content: {text: 'Hello'}, model: 'google/gemini-3-flash-preview'}], calls));

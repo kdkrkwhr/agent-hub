@@ -57,8 +57,8 @@ test('language choice switches the whole UI and is saved', async t => {
   await page.waitForFunction(() => document.querySelector('#settings-title').textContent === 'Roles and models');
   assert.equal(await page.locator('fieldset.role[data-role="analyst"] legend').textContent(), 'Analyst');
   assert.equal(await page.locator('#send').textContent(), 'Send');
-  assert.equal(await page.locator('#composer textarea').getAttribute('placeholder'), 'Ask your roles.');
-  assert.equal(await page.locator('#feed .empty h2').textContent(), 'Start talking with your role team');
+  assert.equal(await page.locator('#composer textarea').getAttribute('placeholder'), 'Describe your audience, goal, capacity and feature candidates.');
+  assert.equal(await page.locator('#feed .empty h2').textContent(), 'What should you build next?');
   assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
   await page.waitForFunction(() => window.hostTest.state.kv.settings?.language === 'en');
 });

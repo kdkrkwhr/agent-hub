@@ -1,8 +1,8 @@
 {
   "name": "agent-hub-radio-anna",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
-  "description": "Agent Hub Radio on Anna: AI roles that debate, vote and draft together.",
+  "description": "Agent Hub Radio on Anna: review release priorities with independent AI roles.",
   "scripts": {
     "dev": "anna-app dev --port 5181 --no-llm",
     "validate": "anna-app validate --strict",

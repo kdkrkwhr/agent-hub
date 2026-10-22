@@ -48,7 +48,7 @@ export function toMarkdown(thread, lang = thread.language === 'en' ? 'en' : 'ko'
   const out = [
     `# ${line(thread.title)}`, '',
     `- ${tr(lang, 'kind')}: ${tr(lang, `kind-${thread.kind}`)}`,
-    `- ${tr(lang, 'status')}: ${tr(lang, `status-${thread.status}`)}`,
+    `- ${tr(lang, 'status')}: ${tr(lang, `status-${thread.savePending ? 'unsaved' : thread.status}`)}`,
     `- ${tr(lang, 'updated')}: ${new Date(Number(thread.updated) || 0).toISOString()}`, '',
   ];
   if (thread.kind === 'vote') {
@@ -56,6 +56,8 @@ export function toMarkdown(thread, lang = thread.language === 'en' ? 'en' : 'ko'
     return out.join('\n');
   }
   out.push(`## ${tr(lang, 'request')}`, '', thread.request.trim(), '');
+  if (thread.mode) out.push(`- ${tr(lang, 'modeLabel')}: ${tr(lang, thread.mode === 'quick' ? 'modeQuick' : 'modeDeep')}`, '');
+  if (thread.purpose === 'priority') out.push(`_${tr(lang, 'decisionHint')}_`, '');
   for (const step of ['opinion', 'rebuttal', 'final', 'review']) {
     const turns = thread.turns.filter(turn => turn.step === step && turn.status !== 'pending');
     if (!turns.length) continue;

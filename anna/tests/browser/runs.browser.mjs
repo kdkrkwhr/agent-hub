@@ -6,6 +6,8 @@ async function start(t, options) {
   const page = await setup(t, options);
   await ready(page);
   await newChannel(page);
+  await page.selectOption('#composer select[name="mode"]', 'deep');
+  await page.selectOption('#composer select[name="purpose"]', 'general');
   return page;
 }
 

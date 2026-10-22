@@ -1,5 +1,6 @@
 import {ROLE_IDS, ROLES} from './roles.mjs';
 import {blankTurn} from './runner.mjs';
+import {priorityGuide} from './decision.mjs';
 
 const MAX_REQUEST = 4000;
 
@@ -36,8 +37,9 @@ export function finalAuthor(roles) {
   return roles.includes('editor') ? 'editor' : roles[roles.length - 1];
 }
 
-export function discussionSteps(roles) {
+export function discussionSteps(roles, mode = 'deep') {
   const author = finalAuthor(roles);
+  if (mode === 'quick') return [...roles.map(role => ({step: 'opinion', role})), {step: 'final', role: author}];
   return [
     ...roles.map(role => ({step: 'opinion', role})),
     ...roles.map(role => ({step: 'rebuttal', role})),
@@ -46,7 +48,7 @@ export function discussionSteps(roles) {
   ];
 }
 
-export function createDiscussion({id, request, roles, language = 'ko', detail = false, now = Date.now()}) {
+export function createDiscussion({id, request, roles, language = 'ko', detail = false, mode = 'deep', purpose = 'general', now = Date.now()}) {
   const text = String(request || '').trim().slice(0, MAX_REQUEST);
   const picked = ROLE_IDS.filter(role => (roles || []).includes(role));
   if (!text) throw new Error('Empty request');
@@ -59,11 +61,13 @@ export function createDiscussion({id, request, roles, language = 'ko', detail = 
     roles: picked,
     language: language === 'en' ? 'en' : 'ko',
     detail: detail === true,
+    mode: mode === 'quick' ? 'quick' : 'deep',
+    purpose: purpose === 'priority' ? 'priority' : 'general',
     status: 'ready',
     created: now,
     updated: now,
     archived: false,
-    turns: discussionSteps(picked).map(({step, role}) => blankTurn(step, role)),
+    turns: discussionSteps(picked, mode).map(({step, role}) => blankTurn(step, role)),
   };
 }
 
@@ -83,7 +87,7 @@ export function discussionPrompt(thread, index) {
   if (turn.step === 'review') section('final', guide.finalDraft);
   const length = turn.step === 'final' || thread.detail ? guide.long : guide.short;
   return {
-    system: [ROLES[turn.role].persona[language], guide.base, length, guide[turn.step]].join('\n'),
+    system: [ROLES[turn.role].persona[language], guide.base, length, guide[turn.step], thread.purpose === 'priority' ? priorityGuide(language, turn.step) : ''].filter(Boolean).join('\n'),
     messages: [{role: 'user', text: parts.join('\n\n')}],
     maxTokens: turn.step === 'final' ? 1200 : thread.detail ? 1000 : 600,
   };

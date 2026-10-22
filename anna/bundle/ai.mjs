@@ -22,9 +22,18 @@ export function classify(error) {
 }
 
 export function createAi(llm) {
+  let streamUnavailable = typeof llm.stream !== 'function';
+  function response(result, fallbackText = '') {
+    const text = result?.content?.text ?? fallbackText;
+    const reason = result?.stopReason || result?.finishReason;
+    if (['length', 'max_tokens', 'maxTokens', 'content_filter', 'contentFilter', 'toolUse', 'refusal'].includes(reason)) {
+      throw new AiError('incomplete', 'Reply did not finish', text);
+    }
+    return {text, model: result?.model || ''};
+  }
   async function viaComplete(request) {
     const result = await llm.complete(request);
-    return {text: result?.content?.text || '', model: result?.model || ''};
+    return response(result);
   }
 
   async function speak({system, messages, preferences, maxTokens = 600, onToken = () => {}, signal, timeoutMs = 120000} = {}) {
@@ -47,9 +56,13 @@ export function createAi(llm) {
     });
     aborted.catch(() => {});
     const raced = promise => Promise.race([promise, aborted]);
-    const fallback = error => !text && UNSUPPORTED.has(error?.code);
+    const fallback = error => {
+      const supportedError = !text && UNSUPPORTED.has(error?.code);
+      if (supportedError) streamUnavailable = true;
+      return supportedError;
+    };
     try {
-      if (typeof llm.stream !== 'function') return await raced(viaComplete(request));
+      if (streamUnavailable) return await raced(viaComplete(request));
       let frame;
       try {
         iterator = llm.stream(request)[Symbol.asyncIterator]();
@@ -66,7 +79,7 @@ export function createAi(llm) {
           text += event.text;
           onToken(text);
         } else if (event?.event === 'complete') {
-          return {text: event.content?.text || text, model: event.model || ''};
+          return response(event, text);
         } else if (event?.event === 'error') {
           if (fallback(event)) return await raced(viaComplete(request));
           throw Object.assign(new Error(event.message || 'stream failed'), {code: event.code});
@@ -76,7 +89,7 @@ export function createAi(llm) {
       throw Object.assign(new Error('stream ended without a reply'), {code: 'stream_closed'});
     } catch (error) {
       if (error instanceof AiError) {
-        error.partial = text;
+        error.partial = error.partial || text;
         throw error;
       }
       throw new AiError(classify(error), error?.message || 'AI unavailable', text);

@@ -30,12 +30,12 @@ const noAi = page => page.evaluate(() => !window.hostTest.calls.some(c => c.meth
 test('a first visit shows the welcome screen and creates a channel', async t => {
   const page = await setup(t);
   await ready(page);
-  assert.match(await page.locator('#feed .empty h2').textContent(), /역할 팀과 대화를 시작하세요/);
+  assert.match(await page.locator('#feed .empty h2').textContent(), /다음 출시, 무엇부터 만들까요/);
   assert.equal(await page.locator('#send').isDisabled(), true);
   await newChannel(page);
   assert.deepEqual(await channelNames(page), ['새 채널 1']);
   assert.equal(await page.locator('#channel-title').textContent(), '새 채널 1');
-  assert.match(await page.locator('#feed .empty').textContent(), /정리자가 최종안/);
+  assert.match(await page.locator('#feed .empty').textContent(), /목표, 개발 여력과 기능 후보/);
   assert.deepEqual(await page.locator('#role-chips .chip[aria-pressed="true"]').allTextContents(), ['@분석가', '@비판자', '@정리자']);
   assert.equal(await page.evaluate(() => window.hostTest.state.kv.channels.length), 1);
   assert.ok(await noAi(page));

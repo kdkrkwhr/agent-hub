@@ -54,6 +54,9 @@ export async function newChannel(page) {
 }
 
 export async function discuss(page, text = '점심 메뉴를 정해 줘') {
+  // Existing regression scenarios intentionally exercise the original deep run.
+  await page.selectOption('#composer select[name="mode"]', 'deep');
+  await page.selectOption('#composer select[name="purpose"]', 'general');
   await page.fill('#composer textarea[name="request"]', text);
   await page.click('#send');
 }

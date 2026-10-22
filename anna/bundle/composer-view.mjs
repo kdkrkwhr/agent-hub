@@ -22,13 +22,21 @@ export function renderComposer(ctx) {
     chip.disabled = !open;
     return chip;
   }));
-  $('#estimate').textContent = !channel ? '' : picks.length < 2 ? t('needRoles') : t('estimate', {n: discussionSteps(picks).length});
+  $('#estimate').textContent = !channel ? '' : picks.length < 2 ? t('needRoles') : t('estimate', {n: discussionSteps(picks, form().elements.mode.value).length});
   $('#composer-closed').hidden = !channel || !channel.archived;
-  for (const element of [form().elements.request, form().elements.detail, $('#send'), $('#open-ballot')]) element.disabled = !open;
+  for (const element of [form().elements.request, form().elements.detail, form().elements.mode, form().elements.purpose, $('#priority-example'), $('#send'), $('#open-ballot')]) element.disabled = !open;
 }
 
 export function mountComposer(ctx) {
   const element = form();
+  element.elements.mode.addEventListener('change', () => renderComposer(ctx));
+  $('#priority-example').addEventListener('click', () => {
+    if (element.elements.request.value.trim()) return notice(t('exampleWouldReplace'));
+    element.elements.purpose.value = 'priority';
+    element.elements.request.value = t('priorityExampleText');
+    element.elements.request.focus();
+    notice(t('exampleReady'));
+  });
   element.elements.request.addEventListener('keydown', event => {
     if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
     event.preventDefault();
@@ -40,7 +48,7 @@ export function mountComposer(ctx) {
     const roles = ctx.picks || [];
     if (!request.trim()) return notice(t('needText'));
     if (roles.length < 2) return notice(t('needRoles'));
-    const thread = createDiscussion({id: newId(), request, roles, language: getLanguage(), detail: element.elements.detail.checked});
+    const thread = createDiscussion({id: newId(), request, roles, language: getLanguage(), detail: element.elements.detail.checked, mode: element.elements.mode.value, purpose: element.elements.purpose.value});
     if (await startThread(ctx, thread)) element.elements.request.value = '';
   });
 }

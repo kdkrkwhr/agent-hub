@@ -1,17 +1,19 @@
 import {$, button, confirmButton, copyText, node, notice, when} from './view.mjs';
 import {getLanguage, t} from './i18n.mjs';
 import {ROLES, modelMismatch} from './roles.mjs';
-import {runThread, settleInterrupted, skipTurn} from './runner.mjs';
+import {runThread, saveThreadOnly, settleInterrupted, skipTurn} from './runner.mjs';
 import {canSkip, discussionPlan} from './discussion.mjs';
 import {parseBallot, tally, votePlan} from './voting.mjs';
 import {toMarkdown} from './export.mjs';
 import {channelThreads} from './channels.mjs';
 import {channelRecord, currentChannel} from './context.mjs';
+import {decisionSections} from './decision.mjs';
 
 const PLANS = {discussion: discussionPlan, vote: votePlan};
 const TAGS = {analyst: 'AN', critic: 'CR', editor: 'ED'};
 const roleName = id => ROLES[id].name[getLanguage()];
-const shape = thread => `${thread.status}|${thread.turns.map(turn => `${turn.status}:${turn.requested}`).join(',')}`;
+const shape = thread => `${thread.status}|${thread.savePending}|${thread.turns.map(turn => `${turn.status}:${turn.requested}`).join(',')}`;
+const pendingSaves = ctx => ctx.pendingSaves ||= new Map();
 const feed = () => $('#feed');
 const nearBottom = element => element.scrollHeight - element.scrollTop - element.clientHeight < 120;
 
@@ -49,7 +51,7 @@ function userBubble(thread) {
 }
 
 function turnActions(ctx, thread, turn, index) {
-  if (ctx.running || (turn.status !== 'failed' && turn.status !== 'stopped')) return null;
+  if (ctx.running || pendingSaves(ctx).size || (turn.status !== 'failed' && turn.status !== 'stopped')) return null;
   const actions = node('div', 'turn-actions');
   actions.append(button(t('retry'), () => run(ctx, thread), 'retry'));
   if (thread.kind === 'vote' || canSkip(turn)) {
@@ -136,6 +138,7 @@ async function removeThread(ctx, thread) {
   try {
     ctx.threads = await ctx.store.deleteThread(thread.id);
     ctx.timeline = ctx.timeline.filter(item => item.id !== thread.id);
+    pendingSaves(ctx).delete(thread.id);
     ctx.render();
     notice(t('removed'));
   } catch {
@@ -145,11 +148,26 @@ async function removeThread(ctx, thread) {
 
 function runFoot(ctx, thread) {
   const foot = node('div', 'run-foot');
-  const pill = node('span', `pill status-${thread.status}`, `${t(`kind-${thread.kind}`)} · ${t(`status-${thread.status}`)}`);
+  const state = thread.savePending ? 'unsaved' : thread.status;
+  const pill = node('span', `pill status-${state}`, `${t(`kind-${thread.kind}`)} · ${t(`status-${state}`)}`);
   foot.append(pill);
   const running = ctx.running?.thread === thread;
   if (running) foot.append(button(t('stop'), () => ctx.running?.controller.abort(), 'stop'));
-  if (!ctx.running && thread.status !== 'done') foot.append(button(t('resume'), () => run(ctx, thread), 'resume'));
+  if (!ctx.running && thread.savePending) {
+    foot.append(node('p', 'save-warning', t('saveRetry')));
+    const retry = button(t('retrySave'), async () => {
+      retry.disabled = true;
+      const result = await saveThreadOnly({thread, store: ctx.store});
+      if (result.saved) {
+        pendingSaves(ctx).delete(thread.id);
+        if (Array.isArray(result.threads)) ctx.threads = result.threads;
+        notice(t('savedNoAi'));
+      } else notice(t('saveRetry'));
+      ctx.render();
+    }, 'retry-save');
+    foot.append(retry);
+  } else if (!ctx.running && !pendingSaves(ctx).size && thread.status !== 'done') foot.append(button(t('resume'), () => run(ctx, thread), 'resume'));
+  if (thread.status === 'stopped' || thread.turns.some(turn => turn.error === 'timeout')) foot.append(node('p', 'resume-note', t('resumeNotice')));
   if (!running) {
     foot.append(
       button(t('copy'), () => copyText(toMarkdown(thread, getLanguage())), 'copy'),
@@ -159,14 +177,62 @@ function runFoot(ctx, thread) {
   return foot;
 }
 
+function decisionCard(thread) {
+  const final = thread.turns.find(turn => turn.step === 'final' && turn.status === 'done');
+  if (!final) return null;
+  const card = node('section', 'decision-card');
+  const head = node('div', 'decision-head');
+  head.append(node('h2', '', t('decisionTitle')), modelBadge(final));
+  head.append(button(t('copyDecision'), () => copyText(decisionText(thread)), 'copy-decision'));
+  card.append(head, node('p', 'hint', t(thread.mode === 'quick' ? 'quickResultHint' : 'decisionHint')));
+  const sections = thread.purpose === 'priority' ? decisionSections(final.text, thread.language) : null;
+  if (sections) {
+    const grid = node('div', 'decision-grid');
+    for (const [index, section] of sections.entries()) {
+      const cell = node('section', `decision-section decision-section-${index}`);
+      cell.append(node('h3', '', section.title), node('p', 'decision-text', section.text));
+      grid.append(cell);
+    }
+    card.append(grid);
+  } else card.append(node('p', 'decision-text', final.text));
+  const reviews = thread.turns.filter(turn => turn.step === 'review');
+  if (reviews.length) {
+    const box = node('div', 'decision-reviews');
+    box.append(node('h3', '', t('reviewNotes')));
+    for (const review of reviews) {
+      box.append(node('p', 'decision-text', `${roleName(review.role)} · ${t(`status-${review.status}`)}\n${review.text || ''}`));
+    }
+    card.append(box);
+  }
+  if (thread.turns.some(turn => turn.status === 'skipped')) card.append(node('p', 'hint', t('partialDecision')));
+  return card;
+}
+
+function decisionText(thread) {
+  const final = thread.turns.find(turn => turn.step === 'final' && turn.status === 'done');
+  const reviews = thread.turns.filter(turn => turn.step === 'review').map(turn => `${roleName(turn.role)} · ${t(`status-${turn.status}`)}\n${turn.text || ''}`);
+  return [thread.title, t('decisionHint'), final?.text || '', reviews.length ? t('reviewNotes') : '', ...reviews,
+    thread.turns.some(turn => turn.status === 'skipped') ? t('partialDecision') : ''].filter(Boolean).join('\n\n');
+}
+
 function runBlock(ctx, thread) {
   const block = node('article', 'run');
   block.dataset.id = thread.id;
   block.dataset.kind = thread.kind;
-  block.dataset.status = thread.status;
+  block.dataset.status = thread.savePending ? 'unsaved' : thread.status;
   block.append(userBubble(thread));
   if (thread.kind === 'vote') block.append(ballotCard(ctx, thread));
-  else thread.turns.forEach((turn, index) => { if (turn.status !== 'pending') block.append(turnBubble(ctx, thread, turn, index)); });
+  else {
+    const decision = decisionCard(thread);
+    if (decision) block.append(decision);
+    const history = decision ? node('details', 'discussion-history') : block;
+    if (decision) {
+      history.open = thread.status !== 'done';
+      history.append(node('summary', '', t('allOpinions')));
+      block.append(history);
+    }
+    thread.turns.forEach((turn, index) => { if (turn.status !== 'pending') history.append(turnBubble(ctx, thread, turn, index)); });
+  }
   block.append(runFoot(ctx, thread));
   return block;
 }
@@ -177,7 +243,8 @@ function emptyState(ctx) {
     box.append(node('h2', '', t('welcomeTitle')), node('p', '', t('welcomeHint')));
     box.append(button(t('newChannel'), () => ctx.newChannel(), 'primary welcome-new'));
   } else {
-    box.append(node('p', '', t('emptyChannel')));
+    box.append(node('h2', '', t('welcomeTitle')), node('p', '', t('emptyChannel')));
+    box.append(button(t('priorityExample'), () => $('#priority-example').click(), 'example-start'));
   }
   return box;
 }
@@ -220,12 +287,15 @@ export async function loadTimeline(ctx) {
     return renderTimeline(ctx);
   }
   const items = channelThreads(ctx.threads, id);
-  const loaded = await Promise.all(items.map(item => (ctx.running?.thread.id === item.id ? ctx.running.thread : ctx.store.loadThread(item.id).catch(() => null))));
+  for (const thread of pendingSaves(ctx).values()) {
+    if (thread.channel === id && !items.some(item => item.id === thread.id)) items.push(thread);
+  }
+  const loaded = await Promise.all(items.map(item => (pendingSaves(ctx).get(item.id) || (ctx.running?.thread.id === item.id ? ctx.running.thread : ctx.store.loadThread(item.id).catch(() => null)))));
   if (request !== loading || ctx.channel !== id) return;
   ctx.timeline = loaded.filter(Boolean);
   if (ctx.timeline.length < items.length) notice(t('openFailed'));
   for (const thread of ctx.timeline) {
-    if (thread === ctx.running?.thread || thread.status !== 'running') continue;
+    if (thread.savePending || thread === ctx.running?.thread || thread.status !== 'running') continue;
     settleInterrupted(thread);
     ctx.store.saveThread(thread).then(threads => { ctx.threads = threads; }).catch(() => {});
   }
@@ -235,6 +305,7 @@ export async function loadTimeline(ctx) {
 
 export async function run(ctx, thread) {
   if (ctx.running) return notice(t('busy'));
+  if (pendingSaves(ctx).size || thread.savePending) return notice(t('saveRetry'));
   const controller = new AbortController();
   ctx.running = {thread, controller};
   notice('');
@@ -249,6 +320,7 @@ export async function run(ctx, thread) {
       settings: ctx.settings,
       signal: controller.signal,
       onUpdate: (current, {saveFailed}) => {
+        if (saveFailed) pendingSaves(ctx).set(current.id, current);
         if (saveFailed && !warned) {
           warned = true;
           notice(t('saveRetry'));
@@ -275,6 +347,7 @@ export async function run(ctx, thread) {
 }
 
 export async function startThread(ctx, thread) {
+  if (pendingSaves(ctx).size) { notice(t('saveRetry')); return false; }
   if (ctx.running || ctx.starting) {
     notice(t('busy'));
     return false;

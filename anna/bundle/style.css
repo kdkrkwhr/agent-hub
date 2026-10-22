@@ -127,6 +127,24 @@ progress::-moz-progress-bar{background:var(--accent);border-radius:6px}
 .composer-row .primary{padding:0 22px;font-size:13px}
 .composer-foot{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 .composer-foot .notice{text-align:right;flex:1;min-width:0}
+.composer-modes{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap}
+.composer-modes label{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
+.composer-modes select{width:auto;padding:5px 8px;font-size:12px;color:var(--text)}
+.usage-note{margin:0;color:var(--muted);font-size:11px;line-height:1.5}
+.decision-card{border:1px solid #36574e;background:#111e20;border-radius:16px;padding:20px;margin:14px 0 20px}
+.decision-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.decision-head h2{font-size:18px;margin:0 auto 0 0;color:var(--accent)}
+.decision-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.decision-section{padding:14px;border:1px solid #293c3c;background:#111b23;border-radius:10px;min-width:0}
+.decision-section h3,.decision-reviews h3{font-size:13px;margin:0 0 6px;color:#c3dfd6}
+.decision-section-0{border-color:#3b7160;background:#162b25}
+.decision-section-4{grid-column:1/-1}
+.decision-text{font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.decision-reviews{border-top:1px solid #36574e;padding-top:12px;margin-top:14px;display:grid;gap:10px}
+.discussion-history>summary{cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:14px;padding:8px 0}
+.save-warning,.resume-note{flex-basis:100%;margin:0;font-size:12px;overflow-wrap:anywhere}
+.save-warning,.pill.status-unsaved{color:var(--danger)}
+.resume-note{color:var(--muted)}
 
 /* dialogs */
 .dialog{width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:#111824;color:var(--text);border:1px solid var(--line-2);border-radius:18px;padding:24px 26px;box-shadow:0 30px 80px #000a}
@@ -243,6 +261,10 @@ progress::-moz-progress-bar{background:var(--accent);border-radius:6px}
   .office-card{width:220px}
 }
 @media (max-width:560px){
+  .decision-card{padding:14px}
+  .decision-grid{grid-template-columns:1fr}
+  .composer-modes{gap:6px}
+  .composer-modes label>span{display:none}
   .office-body{flex:none;flex-direction:column;min-height:0}
   .office-map{flex:none;height:auto}
   .office-card{width:auto;overflow:visible}

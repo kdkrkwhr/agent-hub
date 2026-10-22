@@ -3,7 +3,7 @@
   "host_capabilities": ["llm.complete"],
   "required_executas": [],
   "optional_executas": [],
-  "system_prompt_addendum": "Agent Hub Radio runs role-play discussions, votes and document drafts in its own window. It never edits files or runs code. Each role reply shows the model Anna actually used.",
+  "system_prompt_addendum": "Agent Hub Radio reviews release priorities through independent role opinions, decision briefs, discussions and secret ballots in its own window. Each request is separate from prior channel conversations. It never edits files or runs code. Each role reply shows the model Anna actually used. Role agreement is not fact verification.",
   "tags": ["agents", "debate", "voting", "productivity", "korean"],
   "ui": {
     "bundle": {"format": "static-spa", "entry": "index.html", "external_origins": []},

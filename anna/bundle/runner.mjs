@@ -24,31 +24,53 @@ export function settleInterrupted(thread) {
   return thread;
 }
 
+// Save an already received response without asking the model again. A failed
+// index write is treated as unsaved too; retrying this write is idempotent.
+export async function saveThreadOnly({thread, store, now = Date.now}) {
+  const updated = now();
+  try {
+    const threads = await store.saveThread(structuredClone({...thread, updated, savePending: false}));
+    Object.assign(thread, {updated, savePending: false});
+    return {saved: true, threads};
+  } catch {
+    thread.savePending = true;
+    if (thread.status === 'running') thread.status = 'stopped';
+    return {saved: false};
+  }
+}
+
 export async function runThread({thread, plan, ai, store, settings, signal, onUpdate = () => {}, now = Date.now}) {
   let latest = settings;
-  let saveFailed = false;
+  let saveFailed = thread.savePending === true;
+  if (saveFailed) return {thread, settings: latest, saveFailed};
   const update = () => {
     try {
       onUpdate(thread, {saveFailed});
     } catch {}
   };
   async function save() {
-    thread.updated = now();
-    try {
-      await store.saveThread(thread);
-      saveFailed = false;
-    } catch {
-      saveFailed = true;
-    }
+    saveFailed = !(await saveThreadOnly({thread, store, now})).saved;
     update();
+    return !saveFailed;
   }
   thread.status = 'running';
   for (let index = 0; index < thread.turns.length; index += 1) {
     const turn = thread.turns[index];
     if (settled(turn)) continue;
+    if (signal?.aborted) {
+      thread.status = 'stopped';
+      await save();
+      return {thread, settings: latest, saveFailed};
+    }
     Object.assign(turn, {status: 'running', text: '', model: '', error: '', requested: ''});
-    update();
+    // Persist the in-flight marker before a potentially billable request.
+    if (!await save()) {
+      turn.status = 'pending';
+      update();
+      return {thread, settings: latest, saveFailed};
+    }
     try {
+      if (signal?.aborted) throw new AiError('aborted', 'aborted');
       const role = latest.roles?.[turn.role] || {};
       turn.requested = requestedLabel(role);
       const {system, messages, maxTokens} = plan.prompt(thread, index);
@@ -64,7 +86,7 @@ export async function runThread({thread, plan, ai, store, settings, signal, onUp
         },
       });
       Object.assign(turn, {text: String(reply.text || '').slice(0, MAX_TEXT), model: reply.model || ''});
-      turn.error = plan.accept ? plan.accept(thread, index) : '';
+      turn.error = !turn.text.trim() ? 'empty' : String(reply.text).length > MAX_TEXT ? 'incomplete' : plan.accept ? plan.accept(thread, index) : '';
       turn.status = turn.error ? 'failed' : 'done';
       if (turn.model) {
         try {
@@ -84,7 +106,7 @@ export async function runThread({thread, plan, ai, store, settings, signal, onUp
       await save();
       return {thread, settings: latest, saveFailed};
     }
-    await save();
+    if (!await save()) return {thread, settings: latest, saveFailed};
   }
   thread.status = 'done';
   await save();

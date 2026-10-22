@@ -19,7 +19,7 @@
   <nav id="channel-list" class="channel-list"></nav>
   <div class="aside-foot">
     <button type="button" id="open-settings" class="ghost wide" data-t="modelSettings">모델 설정</button>
-    <small>v0.6.0 · Anna AI</small>
+    <small>v0.7.0 · Anna AI</small>
   </div>
 </aside>
 <div id="scrim" class="scrim"></div>
@@ -56,6 +56,11 @@
   <textarea id="export-text" class="export-text" rows="8" readonly hidden></textarea>
   <form id="composer" class="composer">
     <p id="composer-closed" class="closed-note" data-t="closedChannel" hidden></p>
+    <div class="composer-modes">
+      <label><span data-t="purposeLabel">검토할 일</span><select name="purpose"><option value="priority" data-t="purposePriority">기능 우선순위</option><option value="general" data-t="purposeGeneral">자유 검토</option></select></label>
+      <label><span data-t="modeLabel">방식</span><select name="mode"><option value="quick" data-t="modeQuick">빠른 검토</option><option value="deep" data-t="modeDeep">심층 토론</option></select></label>
+      <button type="button" id="priority-example" class="ghost" data-t="priorityExample" disabled>예시 채우기</button>
+    </div>
     <div class="composer-tools">
       <div id="role-chips" class="chips" role="group" data-ta="voters"></div>
       <label class="check small"><input type="checkbox" name="detail"><span data-t="detail">자세히</span></label>
@@ -67,6 +72,7 @@
       <button type="submit" id="send" class="primary" data-t="send" disabled>보내기</button>
     </div>
     <div class="composer-foot"><small data-t="enterHint">Enter 전송 · Shift+Enter 줄바꿈</small><p id="notice" class="notice" role="status" data-notice></p></div>
+    <p class="usage-note" data-t="usageNote"></p>
   </form>
 </main>
 

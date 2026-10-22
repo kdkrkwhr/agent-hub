@@ -12,6 +12,11 @@ import {mountBallot} from './ballot-view.mjs';
 import {mountOffice, renderOffice} from './office-view.mjs';
 
 const ctx = {threads: [], channels: [], channel: null, timeline: [], picks: [], running: null};
+window.addEventListener('beforeunload', event => {
+  if (!ctx.pendingSaves?.size) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 function render() {
   renderSidebar(ctx);
