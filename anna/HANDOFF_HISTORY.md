@@ -1,5 +1,11 @@
 # Agent Hub Radio 인수인계
 
+## 이전 배포 (2026-10-15)
+
+- 앱 `agent-hub-radio`(app_id 561), 브랜치 `release-anna`, 커밋 `6cdbfc8`.
+- 최신 버전 0.6.0(version_id 1391), 작업 리비전 4, 소유자에게 `0.0.0-draft`로 설치됨. 상태는 draft이며 공개 출시·심사 제출은 하지 않았다.
+- 0.6.0은 사무실·투표실 지도 탭을 더했다. 자세한 내용은 [RELEASE_060.md](RELEASE_060.md). 0.5.0 화면 개편은 [RELEASE_050.md](RELEASE_050.md), 이전 단계는 [RELEASE_041.md](RELEASE_041.md).
+
 ## 현재 상태 (2026-10-15)
 
 - 앱 `agent-hub-radio`(app_id 561), 브랜치 `release-anna`, 커밋 `6cdbfc8`.
