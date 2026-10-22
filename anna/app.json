@@ -3,9 +3,16 @@
   "name": "Agent Hub Radio",
   "version": "0.7.1",
   "tagline": "Decide what to build next with an analyst, critic and editor using your Anna AI.",
-  "description": "Share your audience, release goal, capacity and feature candidates. Agent Hub Radio gathers independent role opinions and produces a release decision brief: what to build first, what to defer, reasons, assumptions to check and a next action. Choose a quick review (4 AI calls with all three roles) or an in-depth debate (9 calls), or compare options with a secret ballot. Keep channels and export Markdown. Each request is a separate review; previous channel conversations are not automatically included. Uses your Anna AI allowance. Model preferences are requests, not guarantees; every reply shows the model actually used. Role agreement does not establish facts or guarantee accuracy. Supports Korean and English.",
+  "description": "Too many feature ideas and not enough time? Bring your next release to an AI meeting room.\n\nShare your audience, goal, development capacity and feature candidates. An analyst, critic and editor review the options, then organise what to build first, what to defer, the reasons, assumptions to check and a next action. Start with the built-in example and adapt it to your project.\n\n- Quick review: collect role opinions and a decision brief.\n- In-depth debate: add rebuttals and reviews after the final proposal, including remaining disagreements.\n- Secret ballot: compare 2–6 options; reveal choices and reasons after every participating role has been processed.\n- Keep topics in channels, revisit saved results, copy a brief or export a channel as Markdown.\n- See role status in the office view. Supports Korean and English.\n\nRuns inside Anna without a separate CLI, API key or developer-hosted server. Uses your Anna account's AI allowance: with three roles, quick review uses 4 AI calls, in-depth debate 9, and a ballot 3. Retries can use additional allowance; call counts are not token counts or prices.\n\nEach request is a separate review; earlier channel conversations are not automatically included. Roles are AI perspectives and may use the same model. Model preferences are requests, not guarantees; replies show the actual model used. Agreement or a majority vote does not verify facts. The app does not execute code or edit your files.",
   "category": "productivity",
   "homepage_url": "https://github.com/kdkrkwhr/agent-hub/blob/release-anna/anna/README.md",
   "support_url": "https://github.com/kdkrkwhr/agent-hub/issues",
-  "logo_file": "store/logo.jpg"
+  "privacy_url": "https://github.com/kdkrkwhr/agent-hub/blob/release-anna/anna/DATA_USE.md",
+  "logo_file": "store/logo.jpg",
+  "screenshots": [
+    "store/screenshots/01-start-with-example.png",
+    "store/screenshots/02-decision-brief.png",
+    "store/screenshots/03-vote-result.png",
+    "store/screenshots/04-office.png"
+  ]
 }
