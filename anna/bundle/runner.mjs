@@ -1,9 +1,11 @@
 import {AiError} from './ai.mjs';
 import {modelPreferences, recordModel, requestedLabel} from './roles.mjs';
+import {storageErrorKind} from './store.mjs';
 
 const MAX_TEXT = 8000;
 
 export function newId(now = Date.now(), random = Math.random) {
+  if (!arguments.length && globalThis.crypto?.randomUUID) return crypto.randomUUID();
   return `${now.toString(36)}-${Math.floor(random() * 36 ** 6).toString(36).padStart(6, '0')}`;
 }
 
@@ -24,16 +26,18 @@ export function settleInterrupted(thread) {
   return thread;
 }
 
-// Save an already received response without asking the model again. A failed
-// index write is treated as unsaved too; retrying this write is idempotent.
+// Save an already received response without asking the model again.
 export async function saveThreadOnly({thread, store, now = Date.now}) {
   const updated = now();
   try {
-    const threads = await store.saveThread(structuredClone({...thread, updated, savePending: false}));
-    Object.assign(thread, {updated, savePending: false});
+    const snapshot = structuredClone({...thread, updated, savePending: false,
+      leaseUntil: thread.status === 'running' ? thread.leaseUntil : 0});
+    const threads = await store.saveThread(snapshot);
+    Object.assign(thread, {updated, savePending: false, saveError: '', _etag: snapshot._etag, leaseUntil: snapshot.leaseUntil});
     return {saved: true, threads};
-  } catch {
+  } catch (error) {
     thread.savePending = true;
+    thread.saveError = storageErrorKind(error);
     if (thread.status === 'running') thread.status = 'stopped';
     return {saved: false};
   }
@@ -54,6 +58,7 @@ export async function runThread({thread, plan, ai, store, settings, signal, onUp
     return !saveFailed;
   }
   thread.status = 'running';
+  thread.runOwner = newId();
   for (let index = 0; index < thread.turns.length; index += 1) {
     const turn = thread.turns[index];
     if (settled(turn)) continue;
@@ -63,6 +68,7 @@ export async function runThread({thread, plan, ai, store, settings, signal, onUp
       return {thread, settings: latest, saveFailed};
     }
     Object.assign(turn, {status: 'running', text: '', model: '', error: '', requested: ''});
+    thread.leaseUntil = now() + 150000;
     // Persist the in-flight marker before a potentially billable request.
     if (!await save()) {
       turn.status = 'pending';

@@ -24,6 +24,8 @@ export function normalizeChannel(raw) {
     archived: raw.archived === true,
     created: Number(raw.created) || 0,
     updated: Number(raw.updated) || 0,
+    ...(typeof raw._etag === 'string' ? {_etag: raw._etag} : {}),
+    ...(typeof raw._base === 'string' ? {_base: raw._base} : {}),
   };
 }
 

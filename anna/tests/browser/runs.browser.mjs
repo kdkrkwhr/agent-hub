@@ -24,7 +24,7 @@ test('a discussion runs nine turns as role bubbles with the actual model', async
   for (const text of await run.locator('.message .model').allTextContents()) assert.match(text, /mock\/gemini-test/);
   assert.match(await run.locator('.pill').textContent(), /토론 · 완료/);
   assert.equal(await page.locator('#composer textarea[name="request"]').inputValue(), '');
-  assert.deepEqual(await page.evaluate(() => window.hostTest.state.kv.settings.seenModels), ['mock/gemini-test']);
+  assert.deepEqual(await page.evaluate(async () => (await window.hostTest.settings()).seenModels), ['mock/gemini-test']);
   assert.match(await page.locator('#channel-list .channel.active small').textContent(), /기록 1건/);
 });
 
@@ -147,7 +147,7 @@ test('a double click and Enter during a run start only one discussion', async t 
     send.click();
   });
   await runStatus(page, 'done');
-  assert.equal(await page.evaluate(() => window.hostTest.state.kv.threads.length), 1);
+  assert.equal(await page.evaluate(() => Object.keys(window.hostTest.state.kv).filter(key => /^thread\/[^/]+$/.test(key)).length), 1);
   assert.equal((await llm(page)).length, 9);
 });
 
@@ -210,7 +210,7 @@ test('the chosen roles are remembered for the channel', async t => {
   await discuss(page);
   await runStatus(page, 'done');
   assert.equal((await llm(page)).length, 6);
-  await page.waitForFunction(() => window.hostTest.state.kv.channels?.[0]?.roles?.join() === 'critic,editor');
+  await page.waitForFunction(() => Object.entries(window.hostTest.state.kv).find(([key]) => key.startsWith('channel/'))?.[1]?.roles?.join() === 'critic,editor');
   await page.reload();
   await ready(page);
   assert.equal(await page.locator('#role-chips .chip[data-role="analyst"]').getAttribute('aria-pressed'), 'false');

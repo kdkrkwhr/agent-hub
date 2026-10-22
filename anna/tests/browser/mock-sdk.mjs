@@ -1,7 +1,15 @@
 // Deterministic host for UI tests. No Anna account, network or AI allowance.
+import {createStore} from '/store.mjs';
 const state = JSON.parse(localStorage.getItem('test-host') || '{"kv":{}}');
 const faults = JSON.parse(sessionStorage.getItem('test-faults') || '{}');
 const calls = [];
+state.meta ||= {};
+state.revision ||= 0;
+const tag = key => state.meta[key]?.etag || 'seed';
+const guard = (key, expected) => {
+  if (expected !== undefined && (!Object.hasOwn(state.kv, key) || tag(key) !== expected))
+    throw Object.assign(new Error('if_match mismatch'), {code: 'precondition_failed'});
+};
 let streams = 0;
 const persist = () => localStorage.setItem('test-host', JSON.stringify(state));
 window.hostTest = {state, faults, calls};
@@ -12,19 +20,23 @@ const runtime = {
     async get({key}) {
       calls.push({method: 'storage.get', key});
       if (faults.load) throw new Error('storage unavailable');
-      return Object.hasOwn(state.kv, key) ? {value: structuredClone(state.kv[key]), etag: 'e', exists: true} : {value: null, exists: false};
+      return Object.hasOwn(state.kv, key) ? {value: structuredClone(state.kv[key]), etag: tag(key), exists: true} : {value: null, exists: false};
     },
-    async set({key, value}) {
+    async set({key, value, if_match, metadata}) {
       calls.push({method: 'storage.set', key});
       if (faults.save) throw new Error('storage unavailable');
+      if (faults.capacity) throw Object.assign(new Error('value_too_large'), {code: 'value_too_large'});
+      guard(key, if_match);
       state.kv[key] = structuredClone(value);
+      state.meta[key] = {etag: String(++state.revision), metadata, updated_at: String(state.revision).padStart(16, '0')};
       persist();
-      return {etag: 'e'};
+      return {etag: tag(key)};
     },
     async list({prefix = ''} = {}) {
-      return {items: Object.keys(state.kv).filter(key => key.startsWith(prefix)).map(key => ({key})), next_cursor: null};
+      return {items: Object.keys(state.kv).filter(key => key.startsWith(prefix)).map(key => ({key, ...state.meta[key]})), next_cursor: null};
     },
-    async delete({key}) {
+    async delete({key, if_match}) {
+      guard(key, if_match);
       delete state.kv[key];
       persist();
       return {deleted: true};
@@ -57,6 +69,8 @@ const runtime = {
     },
   },
 };
+window.hostTest.storage = runtime.storage;
+window.hostTest.settings = () => createStore(runtime.storage).loadSettings();
 
 export const AnnaAppRuntime = {
   async connect() {

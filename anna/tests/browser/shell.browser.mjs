@@ -37,7 +37,7 @@ test('a first visit shows the welcome screen and creates a channel', async t => 
   assert.equal(await page.locator('#channel-title').textContent(), '새 채널 1');
   assert.match(await page.locator('#feed .empty').textContent(), /목표, 개발 여력과 기능 후보/);
   assert.deepEqual(await page.locator('#role-chips .chip[aria-pressed="true"]').allTextContents(), ['@분석가', '@비판자', '@정리자']);
-  assert.equal(await page.evaluate(() => window.hostTest.state.kv.channels.length), 1);
+  assert.equal(await page.evaluate(() => Object.keys(window.hostTest.state.kv).filter(key => key.startsWith('channel/')).length), 1);
   assert.ok(await noAi(page));
 });
 
@@ -46,7 +46,7 @@ test('earlier records appear in their own channel with every turn and the actual
   await ready(page);
   assert.deepEqual(await channelNames(page), ['이전 기록']);
   assert.equal(await page.locator('#channel-title').textContent(), '이전 기록');
-  assert.deepEqual(await page.locator('#feed .run').evaluateAll(runs => runs.map(run => run.dataset.id)), ['v1', 'd1']);
+  assert.deepEqual(await page.locator('#feed .run').evaluateAll(runs => runs.map(run => run.dataset.id)), ['d1', 'v1']);
   const run = page.locator('#feed .run[data-id="d1"]');
   assert.equal(await run.locator('.message:not(.user)').count(), 9);
   for (const text of await run.locator('.message .model').allTextContents()) assert.match(text, /google\/gemini-3-flash-preview/);
@@ -81,7 +81,7 @@ test('channels switch, rename and close', async t => {
   await page.fill('#rename-form input[name="title"]', '  점심 회의  ');
   await page.click('#rename-form button[type="submit"]');
   await page.waitForFunction(() => document.querySelector('#channel-title').textContent === '점심 회의');
-  assert.equal(await page.evaluate(() => window.hostTest.state.kv.channels.find(c => c.id === 'legacy').title), '점심 회의');
+  assert.equal(await page.evaluate(() => window.hostTest.state.kv['channel/legacy'].title), '점심 회의');
   await page.click('#close-channel');
   await page.waitForFunction(() => document.querySelector('#close-channel').textContent === '다시 열기');
   assert.equal(await page.locator('#composer-closed').isVisible(), true);
@@ -101,10 +101,10 @@ test('a channel exports as one Markdown file', async t => {
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('#export')]);
   assert.equal(download.suggestedFilename(), 'agent-hub-channel-legacy.md');
   const text = await readFile(await download.path(), 'utf8');
-  assert.match(text, /^# 이전 기록\n\n## 어느 쪽/);
+  assert.match(text, /^# 이전 기록\n\n## 점심 메뉴/);
   assert.match(text, /### 최종안/);
   assert.match(text, /최종안 본문/);
-  assert.match(text, /\n---\n\n## 점심 메뉴/);
+  assert.match(text, /\n---\n\n## 어느 쪽/);
 });
 
 test('when the clipboard is blocked the Markdown is shown to copy by hand', async t => {
@@ -146,7 +146,7 @@ test('a record left running by a closed window opens as stopped', async t => {
   await page.waitForSelector('#feed .run[data-status="stopped"]');
   assert.equal(await page.locator('#feed .message[data-step="rebuttal"]').first().getAttribute('data-status'), 'stopped');
   assert.equal(await page.locator('#feed .run-foot button.resume').count(), 1);
-  await page.waitForFunction(() => window.hostTest.state.kv['thread/d1'].status === 'stopped');
+  assert.equal(await page.evaluate(() => window.hostTest.state.kv['thread/d1'].status), 'running', 'opening never writes a stopped state over a live device');
 });
 
 test('records missing from the index are recovered on start', async t => {

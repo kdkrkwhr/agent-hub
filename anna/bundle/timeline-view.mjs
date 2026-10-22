@@ -8,11 +8,14 @@ import {toMarkdown} from './export.mjs';
 import {channelThreads} from './channels.mjs';
 import {channelRecord, currentChannel} from './context.mjs';
 import {decisionSections} from './decision.mjs';
+import {storageErrorKind} from './store.mjs';
 
 const PLANS = {discussion: discussionPlan, vote: votePlan};
 const TAGS = {analyst: 'AN', critic: 'CR', editor: 'ED'};
 const roleName = id => ROLES[id].name[getLanguage()];
-const shape = thread => `${thread.status}|${thread.savePending}|${thread.turns.map(turn => `${turn.status}:${turn.requested}`).join(',')}`;
+const shape = thread => `${thread.status}|${thread.savePending}|${thread.saveError}|${thread.turns.map(turn => `${turn.status}:${turn.requested}`).join(',')}`;
+const saveMessage = thread => t(`storage-${thread.saveError || 'connection'}`);
+const leased = thread => thread.leaseUntil > Date.now();
 const pendingSaves = ctx => ctx.pendingSaves ||= new Map();
 const feed = () => $('#feed');
 const nearBottom = element => element.scrollHeight - element.scrollTop - element.clientHeight < 120;
@@ -51,7 +54,7 @@ function userBubble(thread) {
 }
 
 function turnActions(ctx, thread, turn, index) {
-  if (ctx.running || pendingSaves(ctx).size || (turn.status !== 'failed' && turn.status !== 'stopped')) return null;
+  if (ctx.running || pendingSaves(ctx).size || leased(thread) || (turn.status !== 'failed' && turn.status !== 'stopped')) return null;
   const actions = node('div', 'turn-actions');
   actions.append(button(t('retry'), () => run(ctx, thread), 'retry'));
   if (thread.kind === 'vote' || canSkip(turn)) {
@@ -136,13 +139,13 @@ function ballotCard(ctx, thread) {
 
 async function removeThread(ctx, thread) {
   try {
-    ctx.threads = await ctx.store.deleteThread(thread.id);
+    ctx.threads = await ctx.store.deleteThread(thread.id, thread._etag);
     ctx.timeline = ctx.timeline.filter(item => item.id !== thread.id);
     pendingSaves(ctx).delete(thread.id);
     ctx.render();
     notice(t('removed'));
-  } catch {
-    notice(t('saveFailed'));
+  } catch (error) {
+    notice(t(`storage-${storageErrorKind(error)}`));
   }
 }
 
@@ -154,7 +157,7 @@ function runFoot(ctx, thread) {
   const running = ctx.running?.thread === thread;
   if (running) foot.append(button(t('stop'), () => ctx.running?.controller.abort(), 'stop'));
   if (!ctx.running && thread.savePending) {
-    foot.append(node('p', 'save-warning', t('saveRetry')));
+    foot.append(node('p', 'save-warning', saveMessage(thread)));
     const retry = button(t('retrySave'), async () => {
       retry.disabled = true;
       const result = await saveThreadOnly({thread, store: ctx.store});
@@ -162,17 +165,33 @@ function runFoot(ctx, thread) {
         pendingSaves(ctx).delete(thread.id);
         if (Array.isArray(result.threads)) ctx.threads = result.threads;
         notice(t('savedNoAi'));
-      } else notice(t('saveRetry'));
+      } else notice(saveMessage(thread));
       ctx.render();
     }, 'retry-save');
-    foot.append(retry);
-  } else if (!ctx.running && !pendingSaves(ctx).size && thread.status !== 'done') foot.append(button(t('resume'), () => run(ctx, thread), 'resume'));
+    if (!['conflict', 'busy'].includes(thread.saveError)) foot.append(retry);
+    foot.append(confirmButton(t('reloadRecord'), t('confirmReload'), async () => {
+      try {
+        const latest = await ctx.store.loadThread(thread.id);
+        const threads = await ctx.store.listThreads();
+        pendingSaves(ctx).delete(thread.id);
+        ctx.threads = threads;
+        ctx.timeline = ctx.timeline.filter(item => item.id !== thread.id);
+        if (latest) ctx.timeline.push(latest);
+        await loadTimeline(ctx);
+        ctx.render();
+      } catch { notice(t('openFailed')); }
+    }, 'reload-record'));
+  } else if (!ctx.running && !pendingSaves(ctx).size && thread.status !== 'done') {
+    if (leased(thread)) foot.append(node('p', 'save-warning', t('storage-busy')),
+      button(t('refreshRecords'), () => ctx.refresh(), 'refresh-run'));
+    else foot.append(button(t('resume'), () => run(ctx, thread), 'resume'));
+  }
   if (thread.status === 'stopped' || thread.turns.some(turn => turn.error === 'timeout')) foot.append(node('p', 'resume-note', t('resumeNotice')));
   if (!running) {
     foot.append(
       button(t('copy'), () => copyText(toMarkdown(thread, getLanguage())), 'copy'),
-      confirmButton(t('remove'), t('confirmRemove'), () => removeThread(ctx, thread), 'remove'),
     );
+    if (!thread.savePending && !leased(thread)) foot.append(confirmButton(t('remove'), t('confirmRemove'), () => removeThread(ctx, thread), 'remove'));
   }
   return foot;
 }
@@ -297,7 +316,6 @@ export async function loadTimeline(ctx) {
   for (const thread of ctx.timeline) {
     if (thread.savePending || thread === ctx.running?.thread || thread.status !== 'running') continue;
     settleInterrupted(thread);
-    ctx.store.saveThread(thread).then(threads => { ctx.threads = threads; }).catch(() => {});
   }
   renderTimeline(ctx, {scroll: true});
   ctx.renderOffice?.();
@@ -323,7 +341,7 @@ export async function run(ctx, thread) {
         if (saveFailed) pendingSaves(ctx).set(current.id, current);
         if (saveFailed && !warned) {
           warned = true;
-          notice(t('saveRetry'));
+          notice(saveMessage(current));
         }
         if (!ctx.timeline?.includes(current)) return;
         updateRun(ctx, current);
@@ -333,7 +351,7 @@ export async function run(ctx, thread) {
     ctx.settings = {...ctx.settings, seenModels: result.settings.seenModels};
     const failed = thread.turns.find(turn => turn.status === 'failed');
     if (failed) notice(t(`error-${failed.error}`));
-    else if (result.saveFailed) notice(t('saveRetry'));
+    else if (result.saveFailed) notice(saveMessage(thread));
   } catch {
     notice(t('loadFailed'));
   } finally {
@@ -358,8 +376,8 @@ export async function startThread(ctx, thread) {
   thread.channel = channel.id;
   try {
     ctx.threads = await ctx.store.saveThread(thread);
-  } catch {
-    notice(t('saveFailed'));
+  } catch (error) {
+    notice(t(`storage-${storageErrorKind(error)}`));
     return false;
   } finally {
     ctx.starting = false;

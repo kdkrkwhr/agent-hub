@@ -5,6 +5,7 @@ import {channelExportName, channelMarkdown} from './export.mjs';
 import {newId} from './runner.mjs';
 import {allChannels, channelRecord, currentChannel} from './context.mjs';
 import {loadTimeline} from './timeline-view.mjs';
+import {storageErrorKind} from './store.mjs';
 
 const closeDrawer = () => document.body.classList.remove('drawer-open');
 
@@ -53,8 +54,8 @@ export async function newChannel(ctx) {
   const channel = createChannel({id: newId(), title: t('defaultChannel', {n: allChannels(ctx).length + 1})});
   try {
     ctx.channels = await ctx.store.saveChannel(channel);
-  } catch {
-    return notice(t('saveFailed'));
+  } catch (error) {
+    return notice(t(`storage-${storageErrorKind(error)}`));
   }
   await selectChannel(ctx, channel.id);
   $('#composer').elements.request.focus();
@@ -65,8 +66,8 @@ async function updateChannel(ctx, change) {
   if (!channel) return false;
   try {
     ctx.channels = await ctx.store.saveChannel(channelRecord(channel, {...change, updated: Date.now()}));
-  } catch {
-    notice(t('saveFailed'));
+  } catch (error) {
+    notice(t(`storage-${storageErrorKind(error)}`));
     return false;
   }
   ctx.render();
@@ -76,12 +77,24 @@ async function updateChannel(ctx, change) {
 async function exportChannel(ctx) {
   const channel = currentChannel(ctx);
   if (!channel) return;
-  const items = channelThreads(ctx.threads, channel.id, Infinity);
-  const threads = (await Promise.all(items.map(item => ctx.store.loadThread(item.id).catch(() => null)))).filter(Boolean);
+  const items = channelThreads(await ctx.store.listThreads(), channel.id, Infinity);
+  const threads = await Promise.all(items.map(item => ctx.pendingSaves?.get(item.id) || ctx.store.loadThread(item.id)));
+  if (threads.some(thread => !thread)) throw new Error('Incomplete export');
   download(channelMarkdown(channel, threads, getLanguage()), channelExportName(channel));
 }
 
 export function mountShell(ctx) {
+  ctx.refresh = async () => {
+    if (ctx.running) return notice(t('busy'));
+    try {
+      const [threads, channels] = await Promise.all([ctx.store.listThreads(), ctx.store.listChannels()]);
+      ctx.threads = threads;
+      ctx.channels = channels;
+      await loadTimeline(ctx);
+      ctx.render();
+    } catch { notice(t('openFailed')); }
+  };
+  $('#refresh-records').addEventListener('click', () => ctx.refresh());
   ctx.newChannel = () => newChannel(ctx);
   $('#new-channel').addEventListener('click', () => newChannel(ctx));
   $('#new-channel').disabled = false;

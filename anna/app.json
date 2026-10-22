@@ -1,7 +1,7 @@
 {
   "slug": "agent-hub-radio",
   "name": "Agent Hub Radio",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "tagline": "Decide what to build next with an analyst, critic and editor using your Anna AI.",
   "description": "Share your audience, release goal, capacity and feature candidates. Agent Hub Radio gathers independent role opinions and produces a release decision brief: what to build first, what to defer, reasons, assumptions to check and a next action. Choose a quick review (4 AI calls with all three roles) or an in-depth debate (9 calls), or compare options with a secret ballot. Keep channels and export Markdown. Each request is a separate review; previous channel conversations are not automatically included. Uses your Anna AI allowance. Model preferences are requests, not guarantees; every reply shows the model actually used. Role agreement does not establish facts or guarantee accuracy. Supports Korean and English.",
   "category": "productivity",

@@ -3,19 +3,7 @@ import assert from 'node:assert/strict';
 import {createStore, threadKey} from '../bundle/store.mjs';
 import {defaultSettings, recordModel} from '../bundle/roles.mjs';
 
-function memory(seed = {}) {
-  const kv = structuredClone(seed), log = [];
-  return {kv, log, storage: {
-    async get({key}) { return Object.hasOwn(kv, key) ? {value: structuredClone(kv[key]), exists: true} : {value: null, exists: false}; },
-    async set({key, value}) { log.push(key); kv[key] = structuredClone(value); return {etag: 'e'}; },
-    async list({prefix = '', cursor, limit = 100}) {
-      const keys = Object.keys(kv).filter(k => k.startsWith(prefix)).sort();
-      const start = cursor ? keys.indexOf(cursor) + 1 : 0, page = keys.slice(start, start + limit);
-      return {items: page.map(key => ({key})), next_cursor: start + limit < keys.length ? page.at(-1) : null};
-    },
-    async delete({key}) { if (!Object.hasOwn(kv, key)) throw Object.assign(new Error('missing'), {code: 'not_found'}); delete kv[key]; return {deleted: true}; },
-  }};
-}
+import {memory} from './memory-storage.mjs';
 const thread = (id, updated, extra = {}) => ({id, title: `T${id}`, kind: 'discussion', status: 'running', updated, ...extra});
 
 test('settings load as defaults and save normalized', async () => {
@@ -23,18 +11,18 @@ test('settings load as defaults and save normalized', async () => {
   const store = createStore(m.storage);
   assert.deepEqual(await store.loadSettings(), defaultSettings());
   const saved = await store.saveSettings({...defaultSettings(), language: 'en', roles: {critic: {temperament: 'deep', family: 'gpt', model: ''}}});
-  assert.equal(m.kv.settings.language, 'en');
+  assert.equal((await store.loadSettings()).language, 'en');
   assert.deepEqual(saved.roles.critic, {temperament: 'deep', family: 'gpt', model: ''});
   assert.deepEqual(saved.roles.analyst, {temperament: 'balanced', family: 'auto', model: ''});
 });
 
-test('a thread is written before its index entry, newest first', async () => {
+test('thread writes carry their own listing metadata, newest first', async () => {
   const m = memory();
   const store = createStore(m.storage);
   await store.saveThread(thread('a', 1));
   await store.saveThread(thread('b', 2, {title: 'x'.repeat(200)}));
-  await store.saveThread(thread('a', 3, {status: 'done'}));
-  assert.deepEqual(m.log, ['thread/a', 'threads', 'thread/b', 'threads', 'thread/a', 'threads']);
+  await store.saveThread({...await store.loadThread('a'), updated: 3, status: 'done'});
+  assert.deepEqual(m.log, ['thread/a', 'thread/b', 'thread/a']);
   const index = await store.listThreads();
   assert.deepEqual(index.map(t => [t.id, t.status]), [['a', 'done'], ['b', 'running']]);
   assert.equal(index[1].title.length, 80);
@@ -94,7 +82,7 @@ test('concurrent thread saves keep every index entry', async () => {
   const m = slow(memory());
   const store = createStore(m.storage);
   await Promise.all([store.saveThread(thread('a', 1)), store.saveThread(thread('b', 2))]);
-  assert.deepEqual(m.kv.threads.map(t => t.id), ['b', 'a']);
+  assert.deepEqual((await store.listThreads()).map(t => t.id), ['b', 'a']);
 });
 
 test('a failed write does not block later writes', async () => {
@@ -118,7 +106,7 @@ test('thread ids are validated before writing', async () => {
 });
 
 test('index entries without a time sort last', async () => {
-  const m = memory({threads: [{id: 'x', title: 'X', kind: 'vote', status: 'done', updated: undefined, archived: false}]});
+  const m = memory({'thread/x': {id: 'x', title: 'X', kind: 'vote', status: 'done', updated: undefined, archived: false}});
   const store = createStore(m.storage);
   await store.saveThread(thread('a', 1));
   await store.saveThread(thread('b', 2));
@@ -134,8 +122,8 @@ test('concurrent settings updates both survive', async () => {
   ]);
   assert.equal(last.language, 'en');
   assert.deepEqual(last.seenModels, ['openai/gpt-5-mini']);
-  assert.equal(m.kv.settings.language, 'en');
-  assert.deepEqual(m.kv.settings.seenModels, ['openai/gpt-5-mini']);
+  assert.equal((await store.loadSettings()).language, 'en');
+  assert.deepEqual((await store.loadSettings()).seenModels, ['openai/gpt-5-mini']);
 });
 
 test('loading or deleting an invalid id is rejected without storage access', async () => {
@@ -152,7 +140,7 @@ test('index entries keep the channel and creation time', async () => {
   const store = createStore(m.storage);
   await store.saveThread(thread('a', 2, {channel: 'c1', created: 1}));
   await store.saveThread(thread('b', 3));
-  assert.deepEqual(m.kv.threads.map(t => [t.id, t.channel, t.created]), [['b', '', 3], ['a', 'c1', 1]]);
+  assert.deepEqual((await store.listThreads()).map(t => [t.id, t.channel, t.created]), [['b', '', 3], ['a', 'c1', 1]]);
 });
 
 test('channels are saved by id, cleaned and listed', async () => {
@@ -163,9 +151,9 @@ test('channels are saved by id, cleaned and listed', async () => {
     store.saveChannel({id: 'c1', title: ' 첫 채널 ', roles: ['critic'], updated: 5}),
     store.saveChannel({id: 'c2', title: '둘째', updated: 6}),
   ]);
-  const saved = await store.saveChannel({id: 'c1', title: '바꾼 이름', roles: ['critic'], archived: true, updated: 7});
+  const saved = await store.saveChannel({...((await store.listChannels()).find(c => c.id === 'c1')), title: '바꾼 이름', roles: ['critic'], archived: true, updated: 7});
   assert.deepEqual(saved.map(c => [c.id, c.title, c.archived]), [['old', 'Old', false], ['c1', '바꾼 이름', true], ['c2', '둘째', false]]);
-  assert.deepEqual(m.kv.channels.find(c => c.id === 'c1').roles, ['critic']);
+  assert.deepEqual(m.kv['channel/c1'].roles, ['critic']);
   await assert.rejects(store.saveChannel({id: '../x', title: 'x'}), /Invalid channel id/);
 });
 

@@ -1,6 +1,7 @@
 import {$, node, notice} from './view.mjs';
 import {FAMILIES, ROLE_IDS, ROLES, TEMPERAMENTS} from './roles.mjs';
 import {getLanguage, setLanguage, t} from './i18n.mjs';
+import {StorageError, storageErrorKind} from './store.mjs';
 
 function option(value, label, selected) {
   const element = node('option', '', label);
@@ -61,12 +62,28 @@ export function refreshModels(ctx) {
 }
 
 export function mountSettings(ctx) {
+  let baseline = structuredClone(ctx.settings.roles);
+  const changedRoles = roles => {
+    const before = baseline;
+    return current => {
+      const merged = structuredClone(current.roles);
+      for (const id of ROLE_IDS) for (const key of Object.keys(roles[id])) {
+        if (roles[id][key] === before[id][key]) continue;
+        if (current.roles[id][key] !== before[id][key] && current.roles[id][key] !== roles[id][key]) throw new StorageError('conflict');
+        merged[id][key] = roles[id][key];
+      }
+      return {...current, roles: merged};
+    };
+  };
   const dialog = $('#settings-dialog');
   for (const opener of [$('#open-settings'), $('#settings-button')]) {
-    opener.addEventListener('click', () => {
+    opener.addEventListener('click', async () => {
       document.body.classList.remove('drawer-open');
       notice('');
+      try { ctx.settings = await ctx.store.loadSettings(); }
+      catch { notice(t('openFailed')); return; }
       renderSettings(ctx);
+      baseline = structuredClone(ctx.settings.roles);
       dialog.showModal();
     });
   }
@@ -79,11 +96,12 @@ export function mountSettings(ctx) {
     submit.disabled = true;
     try {
       const roles = readRoles();
-      ctx.settings = await ctx.store.updateSettings(current => ({...current, roles}));
+      ctx.settings = await ctx.store.updateSettings(changedRoles(roles));
+      baseline = structuredClone(ctx.settings.roles);
       renderSettings(ctx);
       notice(t('saved'));
-    } catch {
-      notice(t('saveFailed'));
+    } catch (error) {
+      notice(t(`storage-${storageErrorKind(error)}`));
     } finally {
       submit.disabled = false;
     }
@@ -91,19 +109,21 @@ export function mountSettings(ctx) {
   picker.addEventListener('change', async () => {
     const previous = getLanguage();
     const roles = readRoles();
+    const change = changedRoles(roles);
     setLanguage(picker.value);
     const language = getLanguage();
     ctx.settings = {...ctx.settings, roles, language};
     ctx.rerender();
     picker.disabled = true;
     try {
-      ctx.settings = await ctx.store.updateSettings(current => ({...current, roles, language}));
-    } catch {
+      ctx.settings = await ctx.store.updateSettings(current => ({...change(current), language}));
+      baseline = structuredClone(ctx.settings.roles);
+    } catch (error) {
       picker.value = previous;
       setLanguage(previous);
       ctx.settings = {...ctx.settings, language: previous};
       ctx.rerender();
-      notice(t('saveFailed'));
+      notice(t(`storage-${storageErrorKind(error)}`));
     } finally {
       picker.disabled = false;
     }

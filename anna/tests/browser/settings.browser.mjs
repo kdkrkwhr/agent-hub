@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {openSettings, ready, setup} from './harness.mjs';
 
-const stored = page => page.evaluate(() => window.hostTest.state.kv.settings);
+const stored = page => page.evaluate(() => window.hostTest.settings());
 const status = page => page.locator('#settings-form .notice').textContent();
 
 test('the settings dialog shows three Korean roles without any AI call', async t => {
@@ -60,7 +60,7 @@ test('language choice switches the whole UI and is saved', async t => {
   assert.equal(await page.locator('#composer textarea').getAttribute('placeholder'), 'Describe your audience, goal, capacity and feature candidates.');
   assert.equal(await page.locator('#feed .empty h2').textContent(), 'What should you build next?');
   assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
-  await page.waitForFunction(() => window.hostTest.state.kv.settings?.language === 'en');
+  await page.waitForFunction(async () => (await window.hostTest.settings()).language === 'en');
 });
 
 test('save failures keep the form and explain the problem', async t => {
@@ -69,10 +69,10 @@ test('save failures keep the form and explain the problem', async t => {
   await openSettings(page);
   await page.selectOption('select[name="analyst-family"]', 'claude');
   await page.click('#settings-form button[type="submit"]');
-  await page.waitForFunction(() => document.querySelector('#settings-form .notice').textContent.includes('저장하지 못했어요'));
+  await page.waitForFunction(() => document.querySelector('#settings-form .notice').textContent.includes('저장하지 못해'));
   assert.equal(await page.locator('select[name="analyst-family"]').inputValue(), 'claude');
   assert.equal(await page.locator('#settings-form button[type="submit"]').isDisabled(), false);
-  assert.match(await status(page), /저장하지 못했어요/);
+  assert.match(await status(page), /저장하지 못해/);
 });
 
 test('a failed language save keeps the previous language', async t => {
@@ -80,7 +80,7 @@ test('a failed language save keeps the previous language', async t => {
   await ready(page);
   await openSettings(page);
   await page.selectOption('#language', 'en');
-  await page.waitForFunction(() => document.querySelector('#settings-form .notice').textContent.includes('저장하지 못했어요'));
+  await page.waitForFunction(() => document.querySelector('#settings-form .notice').textContent.includes('저장하지 못해'));
   assert.equal(await page.locator('#language').inputValue(), 'ko');
   assert.equal(await page.locator('#settings-title').textContent(), '역할과 모델');
   assert.equal(await page.locator('fieldset.role[data-role="analyst"] legend').textContent(), '분석가');
@@ -91,7 +91,7 @@ test('a failed channel save explains the problem', async t => {
   const page = await setup(t, {faults: {save: true}});
   await ready(page);
   await page.click('#feed .welcome-new');
-  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('저장하지 못했어요'));
+  await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('저장하지 못해'));
   assert.equal(await page.locator('#channel-list .channel').count(), 0);
 });
 

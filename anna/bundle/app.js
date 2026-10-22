@@ -44,12 +44,8 @@ async function main() {
     ctx.onSettings = () => refreshModels(ctx);
     setLanguage(ctx.settings.language);
     $('#language').value = ctx.settings.language;
-    try {
-      ctx.threads = await ctx.store.repairIndex();
-    } catch {
-      ctx.threads = await ctx.store.listThreads().catch(() => []);
-    }
-    ctx.channels = await ctx.store.listChannels().catch(() => []);
+    ctx.threads = await ctx.store.listThreads();
+    ctx.channels = await ctx.store.listChannels();
     mountSettings(ctx);
     mountShell(ctx);
     mountComposer(ctx);

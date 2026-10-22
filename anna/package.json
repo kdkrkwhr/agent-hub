@@ -1,6 +1,6 @@
 {
   "name": "agent-hub-radio-anna",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "Agent Hub Radio on Anna: review release priorities with independent AI roles.",
   "scripts": {
