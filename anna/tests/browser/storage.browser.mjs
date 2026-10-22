@@ -23,6 +23,7 @@ test('a concurrent edit preserves the local response and reloads the newer recor
   await reload.click(); await reload.click();
   await runStatus(page, 'done');
   assert.match(await page.locator('#feed').textContent(), /최신 답변/);
+  assert.equal(await noticeText(page), '최신 저장 기록을 불러왔어요.');
   assert.equal((await llm(page)).length, 1);
 });
 

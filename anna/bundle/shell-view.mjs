@@ -92,6 +92,7 @@ export function mountShell(ctx) {
       ctx.channels = channels;
       await loadTimeline(ctx);
       ctx.render();
+      notice(t('loadedLatest'));
     } catch { notice(t('openFailed')); }
   };
   $('#refresh-records').addEventListener('click', () => ctx.refresh());

@@ -179,6 +179,7 @@ function runFoot(ctx, thread) {
         if (latest) ctx.timeline.push(latest);
         await loadTimeline(ctx);
         ctx.render();
+        notice(t('loadedLatest'));
       } catch { notice(t('openFailed')); }
     }, 'reload-record'));
   } else if (!ctx.running && !pendingSaves(ctx).size && thread.status !== 'done') {
