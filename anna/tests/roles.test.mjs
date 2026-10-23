@@ -2,20 +2,20 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {ROLE_IDS, ROLES, defaultSettings, normalizeSettings, modelPreferences, requestedLabel, recordModel, modelMismatch} from '../bundle/roles.mjs';
 
-test('three bilingual roles with balanced automatic defaults', () => {
+test('three roles with balanced automatic defaults and English as the default language', () => {
   assert.deepEqual(ROLE_IDS, ['analyst', 'critic', 'editor']);
   for (const id of ROLE_IDS) {
     assert.ok(ROLES[id].name.ko && ROLES[id].name.en && ROLES[id].persona.ko && ROLES[id].persona.en);
     assert.deepEqual(defaultSettings().roles[id], {temperament: 'balanced', family: 'auto', model: ''});
   }
-  assert.equal(defaultSettings().language, 'ko');
+  assert.equal(defaultSettings().language, 'en');
   assert.deepEqual(defaultSettings().seenModels, []);
 });
 
 test('normalization repairs unknown values and bounds model names', () => {
   const s = normalizeSettings({language: 'fr', detail: 'yes', roles: {critic: {temperament: 'reckless', family: 'llama', model: ` ${'m'.repeat(200)} `}},
     seenModels: ['a', 'a', '', 7, ...Array.from({length: 30}, (_, i) => `model-${i}`)]});
-  assert.equal(s.language, 'ko');
+  assert.equal(s.language, 'en');
   assert.equal(s.detail, false);
   assert.deepEqual(s.roles.critic, {temperament: 'balanced', family: 'auto', model: 'm'.repeat(120)});
   assert.deepEqual(s.roles.analyst, {temperament: 'balanced', family: 'auto', model: ''});

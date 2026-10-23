@@ -31,7 +31,7 @@ function fakeStore({failSaves = 0, settings = defaultSettings()} = {}) {
   };
 }
 
-const lunch = (roles = ['analyst', 'critic', 'editor']) => createDiscussion({id: 'd1', request: '점심 메뉴를 정해 줘\n근처에서', roles, now: 1});
+const lunch = (roles = ['analyst', 'critic', 'editor']) => createDiscussion({id: 'd1', request: '점심 메뉴를 정해 줘\n근처에서', roles, language: 'ko', now: 1});
 const run = (thread, ai, store, extra = {}) => runThread({thread, plan: discussionPlan, ai, store, settings: store.settings, now: () => 5, ...extra});
 
 test('three roles take nine turns and the editor writes the final', () => {

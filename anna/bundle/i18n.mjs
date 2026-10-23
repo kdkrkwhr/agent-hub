@@ -1,6 +1,11 @@
+import {DEFAULT_LANGUAGE, normalizeLanguage} from './locales.mjs';
+import chinese from './i18n.zh-CN.mjs';
+import japanese from './i18n.ja.mjs';
+
 export const TEXT = {
   ko: {
     language: '언어',
+    languageHint: '화면과 새 요청에 선택한 언어를 사용해요. 기존 요청은 시작할 때의 언어로 이어지며, 이전 내용은 자동 번역하지 않아요. 언어 변경에는 AI를 호출하지 않아요.',
     settings: '역할과 모델',
     settingsHint: 'Anna 설정에서 켠 모델 안에서만 선택됩니다. 앱은 원하는 모델을 요청하고, 최종 선택은 Anna가 합니다. 답변마다 실제 사용된 모델이 표시됩니다.',
     temperament: '성향',
@@ -79,6 +84,8 @@ export const TEXT = {
     you: '나',
     writing: '작성 중…',
     ballotEyebrow: 'INDEPENDENT BALLOT',
+    hallway: '복도',
+    privateBooth: '비공개',
     ballotTitle: '같은 지문, 각자의 판단',
     ballotHint: '서로의 답을 보지 않고 한 번씩 판단합니다. 모든 표가 모이면 선택과 근거를 함께 공개합니다.',
     passage: '판단할 지문',
@@ -176,6 +183,7 @@ export const TEXT = {
   },
   en: {
     language: 'Language',
+    languageHint: 'Applies to the UI and new requests. Existing runs keep their original language; saved content is not translated. Switching languages makes no AI call.',
     settings: 'Roles and models',
     settingsHint: 'Only models enabled in your Anna settings can be used. The app requests a model and Anna makes the final choice. Every reply shows the model actually used.',
     temperament: 'Temperament',
@@ -254,6 +262,8 @@ export const TEXT = {
     you: 'You',
     writing: 'Writing…',
     ballotEyebrow: 'INDEPENDENT BALLOT',
+    hallway: 'HALLWAY',
+    privateBooth: 'PRIVATE',
     ballotTitle: 'Same passage, separate judgements',
     ballotHint: 'Each role decides once without seeing the others. Choices and reasons are revealed together when every ballot is in.',
     passage: 'Passage to judge',
@@ -349,18 +359,20 @@ export const TEXT = {
     'office-abstain': 'Abstained',
     'office-invalid': 'Invalid',
   },
+  'zh-CN': chinese,
+  ja: japanese,
 };
 
-let language = 'ko';
+let language = DEFAULT_LANGUAGE;
 
 export function setLanguage(value) {
-  language = value === 'en' ? 'en' : 'ko';
+  language = normalizeLanguage(value);
 }
 
 export const getLanguage = () => language;
 
 const fill = (text, values = {}) => text.replace(/\{(\w+)\}/g, (match, name) => (name in values ? String(values[name]) : match));
 
-export const tr = (lang, key, values) => fill(TEXT[lang]?.[key] ?? TEXT.ko[key] ?? key, values);
+export const tr = (lang, key, values) => fill(TEXT[normalizeLanguage(lang)][key] ?? TEXT.en[key] ?? key, values);
 
 export const t = (key, values) => tr(language, key, values);

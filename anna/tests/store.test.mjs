@@ -117,12 +117,12 @@ test('concurrent settings updates both survive', async () => {
   const m = slow(memory());
   const store = createStore(m.storage);
   const [, last] = await Promise.all([
-    store.updateSettings(current => ({...current, language: 'en'})),
+    store.updateSettings(current => ({...current, language: 'zh-CN'})),
     store.updateSettings(current => recordModel(current, 'openai/gpt-5-mini')),
   ]);
-  assert.equal(last.language, 'en');
+  assert.equal(last.language, 'zh-CN');
   assert.deepEqual(last.seenModels, ['openai/gpt-5-mini']);
-  assert.equal((await store.loadSettings()).language, 'en');
+  assert.equal((await store.loadSettings()).language, 'zh-CN');
   assert.deepEqual((await store.loadSettings()).seenModels, ['openai/gpt-5-mini']);
 });
 

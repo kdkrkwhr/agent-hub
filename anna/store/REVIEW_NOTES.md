@@ -1,6 +1,6 @@
 # Agent Hub Radio · Reviewer walkthrough
 
-**Prepared 2026-10-22 against installed draft 0.7.1, working revision 7. Not yet submitted.** The first intended review candidate is 1.0.0; its version and bundle must be verified before attaching these notes to a submission.
+**Updated 2026-10-22 for test draft 0.8.0. Not yet submitted.** See [HANDOFF](../HANDOFF.md) for the verified working revision and bundle. The first intended review candidate is 1.0.0; its version and bundle must be verified before attaching these notes to a submission.
 
 ## What this app does
 
@@ -14,7 +14,7 @@ User guides: [English](../README.en.md), [한국어](../README.md). [Data use](.
 
 Use an Anna account with available AI allowance and an enabled model. Generation consumes that account's allowance. The normal quick-review + ballot path below is **4 + 3 = 7 calls**, excluding retries. Call counts do not indicate price or token usage. Model output and elapsed time can vary.
 
-1. **Open the installed candidate.** A fresh account starts without the owner's saved test channels. For English, open **모델 설정 / Model settings**, select **English** under Language, then close the dialog. For the initial test, leave all three roles at **Family: Automatic / Models used before: No preference**. Existing owner settings may be more restrictive than fresh-account defaults.
+1. **Open the installed candidate.** A fresh account starts in **English**, without the owner's saved test channels. Existing saved language choices are preserved. Under **Model settings → Language**, choose English, 한국어, 简体中文 or 日本語. For the initial test, leave all three roles at **Family: Automatic / Models used before: No preference**. Existing owner settings may be more restrictive than fresh-account defaults.
 2. **Create a channel and fill the example.** Select **+ New channel → Use example**. The input should describe a solo developer's work journal, a two-week limit and five feature candidates. No AI call happens until Send. You can edit the input; using the example does not overwrite an existing draft.
 3. **Run Quick review.** Keep **Feature priorities**, **Quick review** and all three roles selected. Confirm **4 AI calls**, then select **Send** once. Expect three initial opinions and one final synthesis. The decision brief should expose recommendations and assumptions. Expand **Read all role opinions and progress** to inspect the source responses and actual model names. If the model misses the requested headings, its full text is displayed instead of discarded.
 4. **Run a Secret ballot.** Enter the passage and options below. Keep all three roles selected and confirm the three-call estimate. During processing, choices remain hidden. After every role has completed or been explicitly handled after a failure, see the tally and each role's reason and concern. There is no required winning option.
@@ -40,6 +40,7 @@ C. Ten visual themes
 
 ## Optional deeper checks
 
+- **Languages:** select Simplified Chinese or Japanese, fill the example and make a new request. Expect the corresponding UI and requested AI response language. Reopen to check persistence. Changing language must not call AI or change saved response text. An existing stopped run resumes with its original language; new runs use the new choice.
 - **In-depth debate:** make a separate request using this mode. With three roles, expect nine responses: three opinions, three rebuttals, one final proposal and two subsequent reviews. The reviews appear next to the proposal, including disagreement. This adds nine normal AI calls.
 - **Stop/resume:** stop after a completed response. Reopen and inspect saved progress before choosing Resume. Saved, completed steps should not run again. A request that was already sent may still be processed on the server; resuming an unfinished step can consume additional allowance.
 - **Error guidance:** an unavailable model or insufficient allowance should pause the run with a useful message. Check the account's enabled models/allowance and choose whether to retry. Do not deliberately exhaust allowance to test this.
@@ -59,7 +60,7 @@ C. Ten visual themes
 
 [0.7.0 validation](../VALIDATION_070.md): actual quick review, successful three-role ballot, copy/export and reopen. [0.7.1 validation](../VALIDATION_071.md): nine-response debate, stop/reopen/resume, two actual same-account Anna tabs, model availability error, storage limits and conditional writes. Actual observed model: `google/gemini-3-flash-preview`; this is evidence from that account, not a required or promised model.
 
-The code baseline passed 95 unit and 51 simulated-browser tests plus strict validation; a later warning-display fix received targeted rechecks. The current preparation adds documentation, listing metadata and actual screenshots only. These materials do not substitute for the final 1.0 candidate verification.
+The earlier code baseline passed 95 unit and 51 simulated-browser tests plus strict validation; a later warning-display fix received targeted rechecks. Version 0.8.0 adds four-language support and an English default; see [0.8.0 release notes](../RELEASE_080.md) and [HANDOFF](../HANDOFF.md) for its validation. These materials do not substitute for the final 1.0 candidate verification.
 
 ## 제출 전 내부 확인
 

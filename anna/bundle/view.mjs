@@ -1,4 +1,5 @@
 import {t, getLanguage} from './i18n.mjs';
+import {LANGUAGES} from './locales.mjs';
 
 export const $ = selector => document.querySelector(selector);
 
@@ -29,7 +30,7 @@ export function renderText() {
   for (const element of document.querySelectorAll('[data-ta]')) element.setAttribute('aria-label', t(element.dataset.ta));
 }
 
-export const when = value => new Date(Number(value) || 0).toLocaleString(getLanguage() === 'en' ? 'en-US' : 'ko-KR', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
+export const when = value => new Date(Number(value) || 0).toLocaleString(LANGUAGES[getLanguage()].locale, {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
 
 export function download(text, name) {
   const url = URL.createObjectURL(new Blob([text], {type: 'text/markdown'}));

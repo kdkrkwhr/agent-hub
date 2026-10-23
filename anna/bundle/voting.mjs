@@ -1,5 +1,6 @@
 import {ROLE_IDS, ROLES} from './roles.mjs';
 import {blankTurn, settled} from './runner.mjs';
+import {DEFAULT_LANGUAGE, normalizeLanguage} from './locales.mjs';
 
 const MAX_PASSAGE = 4000;
 const MAX_OPTION = 300;
@@ -18,9 +19,19 @@ const GUIDE = {
     passage: 'Passage',
     options: 'Options',
   },
+  'zh-CN': {
+    task: '在不查看他人选票的情况下独立判断。阅读材料后选择一个选项；信息不足时选择 ABSTAIN。',
+    format: '只回复一个 JSON 对象：{"choice":"A","reason":"一句决定性理由","concern":"一句最重要的不确定性，或无"}。不要添加说明或代码块。字段名以及 choice 的选项字母或 ABSTAIN 保持不变，reason 和 concern 必须使用简体中文。',
+    passage: '判断材料', options: '选项',
+  },
+  ja: {
+    task: '他の票を見ずに独立して判断してください。内容を読んで選択肢を一つ選び、情報が足りなければ ABSTAIN を選んでください。',
+    format: 'JSON オブジェクトを一つだけ返してください：{"choice":"A","reason":"決め手となる理由を一文で","concern":"最も重要な不確実性を一文で、またはなし"}。説明やコードブロックは付けないでください。キー名と choice の選択肢記号または ABSTAIN は変更せず、reason と concern は日本語で書いてください。',
+    passage: '判断する内容', options: '選択肢',
+  },
 };
 
-export function createVote({id, passage, options, roles, language = 'ko', now = Date.now()}) {
+export function createVote({id, passage, options, roles, language = DEFAULT_LANGUAGE, now = Date.now()}) {
   const text = String(passage || '').trim().slice(0, MAX_PASSAGE);
   const choices = (options || []).map(option => String(option || '').trim().slice(0, MAX_OPTION)).filter(Boolean).slice(0, MAX_OPTIONS);
   const picked = ROLE_IDS.filter(role => (roles || []).includes(role));
@@ -34,7 +45,7 @@ export function createVote({id, passage, options, roles, language = 'ko', now = 
     passage: text,
     options: choices.map((choice, index) => ({id: String.fromCharCode(65 + index), text: choice})),
     roles: picked,
-    language: language === 'en' ? 'en' : 'ko',
+    language: normalizeLanguage(language),
     detail: false,
     status: 'ready',
     created: now,
@@ -46,7 +57,7 @@ export function createVote({id, passage, options, roles, language = 'ko', now = 
 
 export function votePrompt(thread, index) {
   const turn = thread.turns[index];
-  const language = thread.language === 'en' ? 'en' : 'ko';
+  const language = normalizeLanguage(thread.language ?? 'ko');
   const guide = GUIDE[language];
   const options = thread.options.map(option => `${option.id}. ${option.text}`).join('\n');
   return {

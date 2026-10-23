@@ -74,11 +74,11 @@ test('new channel edits use conditional writes', async () => {
 test('concurrent first-time settings preserve language, roles and both observed models', async () => {
   const m = memory(), a = createStore(m.storage), b = createStore(m.storage);
   await Promise.all([
-    a.updateSettings(current => ({...recordModel(current, 'A'), language: 'en'})),
+    a.updateSettings(current => ({...recordModel(current, 'A'), language: 'ja'})),
     b.updateSettings(current => ({...recordModel(current, 'B'), roles: {...current.roles, critic: {...current.roles.critic, family: 'gpt'}}})),
   ]);
   const settings = await a.loadSettings();
-  assert.equal(settings.language, 'en');
+  assert.equal(settings.language, 'ja');
   assert.equal(settings.roles.critic.family, 'gpt');
   assert.deepEqual(settings.seenModels.sort(), ['A', 'B']);
 });

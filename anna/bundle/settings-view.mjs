@@ -2,6 +2,7 @@ import {$, node, notice} from './view.mjs';
 import {FAMILIES, ROLE_IDS, ROLES, TEMPERAMENTS} from './roles.mjs';
 import {getLanguage, setLanguage, t} from './i18n.mjs';
 import {StorageError, storageErrorKind} from './store.mjs';
+import {LANGUAGES} from './locales.mjs';
 
 function option(value, label, selected) {
   const element = node('option', '', label);
@@ -82,7 +83,9 @@ export function mountSettings(ctx) {
       notice('');
       try { ctx.settings = await ctx.store.loadSettings(); }
       catch { notice(t('openFailed')); return; }
-      renderSettings(ctx);
+      setLanguage(ctx.settings.language);
+      picker.value = getLanguage();
+      ctx.rerender();
       baseline = structuredClone(ctx.settings.roles);
       dialog.showModal();
     });
@@ -91,6 +94,7 @@ export function mountSettings(ctx) {
   const form = $('#settings-form');
   const submit = form.querySelector('button[type="submit"]');
   const picker = $('#language');
+  picker.replaceChildren(...Object.entries(LANGUAGES).map(([code, info]) => option(code, info.label, ctx.settings.language === code)));
   form.addEventListener('submit', async event => {
     event.preventDefault();
     submit.disabled = true;
@@ -110,6 +114,7 @@ export function mountSettings(ctx) {
     const previous = getLanguage();
     const roles = readRoles();
     const change = changedRoles(roles);
+    notice('');
     setLanguage(picker.value);
     const language = getLanguage();
     ctx.settings = {...ctx.settings, roles, language};

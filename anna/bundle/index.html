@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,40 +11,40 @@
 <aside id="sidebar" class="sidebar">
   <div class="brand">
     <img src="logo.svg" alt="" class="logo" width="36" height="36">
-    <div><span>AGENT HUB <b>RADIO</b></span><small data-t="brandSub">역할 팀, 하나의 채널</small></div>
+    <div><span>AGENT HUB <b>RADIO</b></span><small data-t="brandSub">An AI room for your next release</small></div>
   </div>
-  <button type="button" id="new-channel" class="primary wide" data-t="newChannel" disabled>+ 새 채널</button>
-  <div class="section-label"><span data-t="channels">채널</span><span id="channel-count">0</span></div>
-  <label class="check small"><input type="checkbox" id="show-closed"><span data-t="showClosed">닫힌 채널 표시</span></label>
+  <button type="button" id="new-channel" class="primary wide" data-t="newChannel" disabled>+ New channel</button>
+  <div class="section-label"><span data-t="channels">Channels</span><span id="channel-count">0</span></div>
+  <label class="check small"><input type="checkbox" id="show-closed"><span data-t="showClosed">Show closed channels</span></label>
   <nav id="channel-list" class="channel-list"></nav>
   <div class="aside-foot">
-    <button type="button" id="open-settings" class="ghost wide" data-t="modelSettings">모델 설정</button>
-    <small>v0.7.1 · Anna AI</small>
+    <button type="button" id="open-settings" class="ghost wide" data-t="modelSettings">Model settings</button>
+    <small>v0.8.0 · Anna AI</small>
   </div>
 </aside>
 <div id="scrim" class="scrim"></div>
 <main id="main">
   <header class="topbar">
-    <button type="button" id="menu" class="icon" data-ta="openMenu" aria-label="채널 목록 열기">☰</button>
+    <button type="button" id="menu" class="icon" data-ta="openMenu" aria-label="Open channel list">☰</button>
     <h1 id="channel-title">Agent Hub Radio</h1>
     <div class="top-actions">
-      <button type="button" id="settings-button" data-t="modelSettings">모델 설정</button>
-      <button type="button" id="rename" data-t="rename" disabled>이름 변경</button>
-      <button type="button" id="export" data-t="exportChannel" disabled>MD 저장</button>
-      <button type="button" id="refresh-records" data-t="refreshRecords">기록 새로고침</button>
-      <button type="button" id="close-channel" data-t="closeChannel" disabled>채널 닫기</button>
+      <button type="button" id="settings-button" data-t="modelSettings">Model settings</button>
+      <button type="button" id="rename" data-t="rename" disabled>Rename</button>
+      <button type="button" id="export" data-t="exportChannel" disabled>Save MD</button>
+      <button type="button" id="refresh-records" data-t="refreshRecords">Refresh records</button>
+      <button type="button" id="close-channel" data-t="closeChannel" disabled>Close channel</button>
     </div>
   </header>
   <nav id="view-tabs" class="view-tabs" role="tablist" hidden>
-    <button type="button" role="tab" data-view="chat" data-t="tabChat" aria-selected="true">대화</button>
-    <button type="button" role="tab" data-view="office" data-t="tabOffice" aria-selected="false">사무실</button>
+    <button type="button" role="tab" data-view="chat" data-t="tabChat" aria-selected="true">Chat</button>
+    <button type="button" role="tab" data-view="office" data-t="tabOffice" aria-selected="false">Office</button>
   </nav>
   <section id="feed" class="feed" aria-live="polite"></section>
   <section id="office" class="office" hidden>
     <div class="office-head">
       <div class="segmented" role="group" data-ta="tabOffice">
-        <button type="button" data-room-tab="office" data-t="workOffice" aria-pressed="true">업무 사무실</button>
-        <button type="button" data-room-tab="vote" data-t="voteRoom" aria-pressed="false">투표실</button>
+        <button type="button" data-room-tab="office" data-t="workOffice" aria-pressed="true">Work office</button>
+        <button type="button" data-room-tab="vote" data-t="voteRoom" aria-pressed="false">Ballot room</button>
       </div>
       <p id="office-caption" class="office-caption"></p>
       <div id="office-status" class="office-status"></div>
@@ -56,70 +56,71 @@
   </section>
   <textarea id="export-text" class="export-text" rows="8" readonly hidden></textarea>
   <form id="composer" class="composer">
-    <p id="composer-closed" class="closed-note" data-t="closedChannel" hidden></p>
+    <p id="composer-closed" class="closed-note" data-t="closedChannel" hidden>This channel is closed. Reopen it to continue.</p>
     <div class="composer-modes">
-      <label><span data-t="purposeLabel">검토할 일</span><select name="purpose"><option value="priority" data-t="purposePriority">기능 우선순위</option><option value="general" data-t="purposeGeneral">자유 검토</option></select></label>
-      <label><span data-t="modeLabel">방식</span><select name="mode"><option value="quick" data-t="modeQuick">빠른 검토</option><option value="deep" data-t="modeDeep">심층 토론</option></select></label>
-      <button type="button" id="priority-example" class="ghost" data-t="priorityExample" disabled>예시 채우기</button>
+      <label><span data-t="purposeLabel">Review</span><select name="purpose"><option value="priority" data-t="purposePriority">Feature priorities</option><option value="general" data-t="purposeGeneral">Open discussion</option></select></label>
+      <label><span data-t="modeLabel">Mode</span><select name="mode"><option value="quick" data-t="modeQuick">Quick review</option><option value="deep" data-t="modeDeep">In-depth debate</option></select></label>
+      <button type="button" id="priority-example" class="ghost" data-t="priorityExample" disabled>Use example</button>
     </div>
     <div class="composer-tools">
       <div id="role-chips" class="chips" role="group" data-ta="voters"></div>
-      <label class="check small"><input type="checkbox" name="detail"><span data-t="detail">자세히</span></label>
+      <label class="check small"><input type="checkbox" name="detail"><span data-t="detail">In detail</span></label>
       <span id="estimate" class="estimate"></span>
-      <button type="button" id="open-ballot" class="ghost" data-t="secretVote" disabled>독립 비밀 투표</button>
+      <button type="button" id="open-ballot" class="ghost" data-t="secretVote" disabled>Secret ballot</button>
     </div>
     <div class="composer-row">
-      <textarea name="request" rows="2" maxlength="4000" data-tp="placeholder" data-ta="request" placeholder="역할들에게 요청하세요." aria-label="요청"></textarea>
-      <button type="submit" id="send" class="primary" data-t="send" disabled>보내기</button>
+      <textarea name="request" rows="2" maxlength="4000" data-tp="placeholder" data-ta="request" placeholder="Describe your audience, goal, capacity and feature candidates." aria-label="Request"></textarea>
+      <button type="submit" id="send" class="primary" data-t="send" disabled>Send</button>
     </div>
-    <div class="composer-foot"><small data-t="enterHint">Enter 전송 · Shift+Enter 줄바꿈</small><p id="notice" class="notice" role="status" data-notice></p></div>
-    <p class="usage-note" data-t="usageNote"></p>
+    <div class="composer-foot"><small data-t="enterHint">Enter to send · Shift+Enter for a new line</small><p id="notice" class="notice" role="status" data-notice></p></div>
+    <p class="usage-note" data-t="usageNote">Uses your Anna AI allowance. Each request is a separate review; earlier conversation is not included automatically.</p>
   </form>
 </main>
 
 <dialog id="ballot-dialog" class="dialog">
   <form id="ballot-form">
     <p class="eyebrow" data-t="ballotEyebrow">INDEPENDENT BALLOT</p>
-    <h2 data-t="ballotTitle">같은 지문, 각자의 판단</h2>
-    <p class="hint" data-t="ballotHint"></p>
-    <label class="field"><span data-t="passage">판단할 지문</span><textarea name="passage" rows="4" maxlength="4000"></textarea></label>
-    <div class="options-head"><strong data-t="optionsTitle">선택지</strong><button type="button" id="add-option" data-t="addOption">+ 선택지 추가</button></div>
+    <h2 data-t="ballotTitle">Same passage, separate judgements</h2>
+    <p class="hint" data-t="ballotHint">Each role decides once without seeing the others. Choices and reasons are revealed together when every ballot is in.</p>
+    <label class="field"><span data-t="passage">Passage to judge</span><textarea name="passage" rows="4" maxlength="4000"></textarea></label>
+    <div class="options-head"><strong data-t="optionsTitle">Options</strong><button type="button" id="add-option" data-t="addOption">+ Add option</button></div>
     <ol id="ballot-options" class="ballot-options"></ol>
-    <p class="hint small" data-t="optionsHint"></p>
-    <fieldset class="voters"><legend data-t="voters">투표 참여자</legend><div id="ballot-voters"></div></fieldset>
+    <p class="hint small" data-t="optionsHint">2 to 6 options · a role may abstain when it cannot decide.</p>
+    <fieldset class="voters"><legend data-t="voters">Voters</legend><div id="ballot-voters"></div></fieldset>
     <p class="estimate" id="ballot-estimate"></p>
     <p class="notice" data-notice role="status"></p>
     <div class="dialog-actions">
-      <button type="button" id="ballot-cancel" data-t="goBack">돌아가기</button>
-      <button type="submit" class="primary" data-t="startBallot">비밀 투표 시작</button>
+      <button type="button" id="ballot-cancel" data-t="goBack">Back</button>
+      <button type="submit" class="primary" data-t="startBallot">Start secret ballot</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="settings-dialog" class="dialog wide-dialog">
   <div class="dialog-head">
-    <h2 id="settings-title" data-t="settings">역할과 모델</h2>
-    <button type="button" id="settings-close" data-t="close">닫기</button>
+    <h2 id="settings-title" data-t="settings">Roles and models</h2>
+    <button type="button" id="settings-close" data-t="close">Close</button>
   </div>
-  <p class="hint" data-t="settingsHint"></p>
-  <label class="field inline"><span data-t="language">언어</span>
-    <select id="language"><option value="ko">한국어</option><option value="en">English</option></select>
+  <p class="hint" data-t="settingsHint">Only models enabled in your Anna settings can be used. The app requests a model and Anna makes the final choice. Every reply shows the model actually used.</p>
+  <label class="field inline"><span data-t="language">Language</span>
+    <select id="language" aria-describedby="language-hint"><option value="en">English</option></select>
   </label>
+  <p id="language-hint" class="hint" data-t="languageHint">Applies to the UI and new requests. Existing runs keep their original language; saved content is not translated. Switching languages makes no AI call.</p>
   <form id="settings-form">
     <div id="roles" class="roles"></div>
     <p class="notice" data-notice role="status"></p>
-    <div class="dialog-actions"><button type="submit" class="primary" data-t="save" disabled>저장</button></div>
+    <div class="dialog-actions"><button type="submit" class="primary" data-t="save" disabled>Save</button></div>
   </form>
 </dialog>
 
 <dialog id="rename-dialog" class="dialog">
   <form id="rename-form">
-    <h2 data-t="rename">이름 변경</h2>
-    <label class="field"><span data-t="channelTitle">채널 이름</span><input name="title" maxlength="60" autocomplete="off"></label>
+    <h2 data-t="rename">Rename</h2>
+    <label class="field"><span data-t="channelTitle">Channel name</span><input name="title" maxlength="60" autocomplete="off"></label>
     <p class="notice" data-notice role="status"></p>
     <div class="dialog-actions">
-      <button type="button" id="rename-cancel" data-t="cancel">취소</button>
-      <button type="submit" class="primary" data-t="save">저장</button>
+      <button type="button" id="rename-cancel" data-t="cancel">Cancel</button>
+      <button type="submit" class="primary" data-t="save">Save</button>
     </div>
   </form>
 </dialog>

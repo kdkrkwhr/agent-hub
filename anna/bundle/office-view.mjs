@@ -60,13 +60,13 @@ function drawArea(parent, area, kind, label, sub) {
 function drawScene(room, thread, layout) {
   const base = svg('g', {class: 'scenery'});
   base.append(svg('rect', {class: 'corridor', x: 16, y: layout.corridor - 34, width: 968, height: 68, rx: 20}));
-  base.append(svg('text', {class: 'corridor-label', x: 500, y: layout.corridor + 5, 'text-anchor': 'middle'}, room === 'vote' ? 'INDEPENDENT BALLOT' : 'HALLWAY'));
+  base.append(svg('text', {class: 'corridor-label', x: 500, y: layout.corridor + 5, 'text-anchor': 'middle'}, t(room === 'vote' ? 'ballotEyebrow' : 'hallway')));
   for (const area of layout.rooms) {
     if (room !== 'vote') {
       const step = {research: 'opinion', forum: 'rebuttal', synthesis: 'final', review: 'review'}[area.id];
       drawArea(base, area, area.id, t(`room-${area.id}`), step ? t(`step-${step}`) : t('room-lounge-sub'));
     } else if (area.id.startsWith('booth-')) {
-      drawArea(base, area, 'booth', roleName(area.id.slice(6)), 'PRIVATE');
+      drawArea(base, area, 'booth', roleName(area.id.slice(6)), t('privateBooth'));
     } else {
       const option = thread?.options.find(item => `option-${item.id}` === area.id);
       const size = Math.max(4, Math.floor(area.w / 17));

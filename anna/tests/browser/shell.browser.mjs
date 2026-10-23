@@ -169,10 +169,11 @@ test('a narrow window opens the channel list as a drawer', async t => {
   assert.ok(await page.evaluate(() => document.scrollingElement.scrollWidth <= 360));
 });
 
-test('connection failure shows a reopen notice', async t => {
+test('connection failure uses English before the saved language can load', async t => {
   const page = await setup(t, {faults: {connect: true}});
   await page.waitForFunction(() => document.querySelector('#notice').textContent !== '');
-  assert.match(await noticeText(page), /Anna에 연결하지 못했어요/);
+  assert.equal(await noticeText(page), 'Could not connect to Anna. Please reopen the window.');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
   assert.equal(await page.locator('#new-channel').isDisabled(), true);
   assert.equal(await page.locator('#send').isDisabled(), true);
   assert.equal(await page.evaluate(() => document.body.dataset.ready), undefined);

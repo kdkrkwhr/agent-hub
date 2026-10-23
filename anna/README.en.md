@@ -4,19 +4,25 @@
 
 **An AI meeting room for deciding what to build next.** Share your audience, release goal, available time and feature ideas. An analyst, critic and editor help organise what to build first, what to defer, the reasons, assumptions and one next action.
 
-Currently an owner test draft, **0.7.1**. It has not been released publicly; the first planned review version is 1.0.0. Unlike the [local CLI product](../README.md), this Anna app needs no separate CLI, API key or developer-hosted server.
+Currently an owner test draft, **0.8.0**. It has not been released publicly; the first planned review version is 1.0.0. Unlike the [local CLI product](../README.md), this Anna app needs no separate CLI, API key or developer-hosted server.
 
 ![A real decision brief in the installed Anna app, shown in Korean](store/screenshots/02-decision-brief.png)
 
 ## Try your first review
 
-1. Open the installed app in Anna. For English, open **모델 설정 / Model settings**, select **English** under Language, then close the dialog.
+1. Open the installed app in Anna. **English is the default for new users.** To change it, open **Model settings → Language**, choose a language, then close the dialog.
 2. Select **+ New channel**, then **Use example**. This fills the input without making an AI call.
 3. Adapt the audience, goal, capacity and feature candidates. Each request is separate; earlier channel conversations are not included automatically.
 4. Keep **Feature priorities**, **Quick review** and all three roles selected. Check the four-call estimate and select **Send**.
 5. Read the **Release decision brief**. Expand **Read all role opinions and progress** for the individual responses, or use **Copy brief**.
 
 Quick review collects opinions and a synthesis. **In-depth debate** adds rebuttals and reviews after the final proposal. Remaining disagreements appear with the result. If the model does not follow the requested five-section format, the full response is still shown.
+
+## Choose your language
+
+The UI and new AI requests support **English, Korean, Simplified Chinese and Japanese**. The choices appear as **English / 한국어 / 简体中文 / 日本語**. Changing the language saves your choice, updates labels, examples and dates, and makes no AI call. Existing saved choices are preserved rather than replaced by the new English default.
+
+Your input draft and saved text are kept as written. Existing runs resume in the language they started in, even if you later change the UI language. Switching languages does not translate earlier responses. The screenshots in this guide were captured from the earlier 0.7.1 Korean UI; four-language support begins with 0.8.0.
 
 ## Compare options and keep the result
 

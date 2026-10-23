@@ -1,6 +1,7 @@
 import {ROLE_IDS, ROLES} from './roles.mjs';
 import {blankTurn} from './runner.mjs';
 import {priorityGuide} from './decision.mjs';
+import {DEFAULT_LANGUAGE, normalizeLanguage} from './locales.mjs';
 
 const MAX_REQUEST = 4000;
 
@@ -31,6 +32,26 @@ const GUIDE = {
     rebuttals: 'Second-round rebuttals',
     finalDraft: 'Final proposal',
   },
+  'zh-CN': {
+    base: '必须使用简体中文回答。先说结论，不要代替其他角色发言。',
+    short: '用两到三句话简短回答。',
+    long: '详细说明理由，但不超过十句话。',
+    opinion: '你尚未看到其他参与者的意见。请针对请求提出自己的独立意见。',
+    rebuttal: '阅读所有参与者的第一轮意见，反驳不同意的观点或补充遗漏之处。',
+    final: '根据讨论记录撰写最终方案，依次说明结论、依据和待解决问题。',
+    review: '评审最终方案。先说明是否同意，如需修改，只指出最重要的一点。',
+    request: '请求', opinions: '第一轮独立意见', rebuttals: '第二轮反驳与补充', finalDraft: '最终方案',
+  },
+  ja: {
+    base: '必ず日本語で答えてください。結論を先に述べ、他の役割の代わりに発言しないでください。',
+    short: '2～3 文で簡潔に答えてください。',
+    long: '根拠を含めて詳しく説明し、10 文以内に収めてください。',
+    opinion: '他の参加者の意見はまだ見ていません。依頼に対する独立した意見を述べてください。',
+    rebuttal: '全員の最初の意見を読み、同意できない点への反論や不足している点の補足をしてください。',
+    final: '討論の記録から最終案を作り、結論、根拠、残る論点の順に述べてください。',
+    review: '最終案をレビューしてください。まず同意するかを述べ、修正があれば最も重要な点を一つだけ挙げてください。',
+    request: '依頼', opinions: '第 1 ラウンドの独立した意見', rebuttals: '第 2 ラウンドの反論・補足', finalDraft: '最終案',
+  },
 };
 
 export function finalAuthor(roles) {
@@ -48,7 +69,7 @@ export function discussionSteps(roles, mode = 'deep') {
   ];
 }
 
-export function createDiscussion({id, request, roles, language = 'ko', detail = false, mode = 'deep', purpose = 'general', now = Date.now()}) {
+export function createDiscussion({id, request, roles, language = DEFAULT_LANGUAGE, detail = false, mode = 'deep', purpose = 'general', now = Date.now()}) {
   const text = String(request || '').trim().slice(0, MAX_REQUEST);
   const picked = ROLE_IDS.filter(role => (roles || []).includes(role));
   if (!text) throw new Error('Empty request');
@@ -59,7 +80,7 @@ export function createDiscussion({id, request, roles, language = 'ko', detail = 
     title: text.split('\n')[0].slice(0, 80),
     request: text,
     roles: picked,
-    language: language === 'en' ? 'en' : 'ko',
+    language: normalizeLanguage(language),
     detail: detail === true,
     mode: mode === 'quick' ? 'quick' : 'deep',
     purpose: purpose === 'priority' ? 'priority' : 'general',
@@ -73,7 +94,8 @@ export function createDiscussion({id, request, roles, language = 'ko', detail = 
 
 export function discussionPrompt(thread, index) {
   const turn = thread.turns[index];
-  const language = thread.language === 'en' ? 'en' : 'ko';
+  // Records without a language predate the English default; keep their Korean continuation.
+  const language = normalizeLanguage(thread.language ?? 'ko');
   const guide = GUIDE[language];
   const parts = [`${guide.request}:\n${thread.request}`];
   const section = (step, label) => {

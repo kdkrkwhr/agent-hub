@@ -1,6 +1,7 @@
 import {ROLES, modelMismatch} from './roles.mjs';
 import {tr} from './i18n.mjs';
 import {parseBallot, tally} from './voting.mjs';
+import {normalizeLanguage} from './locales.mjs';
 
 const line = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 const code = text => `\`${line(String(text ?? '').replaceAll('`', ''))}\``;
@@ -44,7 +45,8 @@ function voteBody(thread, lang, out) {
   }
 }
 
-export function toMarkdown(thread, lang = thread.language === 'en' ? 'en' : 'ko') {
+export function toMarkdown(thread, lang = thread.language ?? 'ko') {
+  lang = normalizeLanguage(lang);
   const out = [
     `# ${line(thread.title)}`, '',
     `- ${tr(lang, 'kind')}: ${tr(lang, `kind-${thread.kind}`)}`,

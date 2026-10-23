@@ -8,7 +8,10 @@ const mock = await readFile(new URL('./mock-sdk.mjs', import.meta.url), 'utf8');
 const TYPES = {'.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml'};
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:";
 
-export async function setup(t, {faults = {}, kv = {}, viewport = {width: 1180, height: 820}} = {}) {
+// Existing regression fixtures represent users who already chose Korean.
+// Use language: null for genuinely fresh storage and the product's English default.
+export async function setup(t, {faults = {}, kv = {}, language = 'ko', viewport = {width: 1180, height: 820}} = {}) {
+  kv = {...(language ? {settings: {language}} : {}), ...kv};
   const browser = await chromium.launch(process.env.ANNA_BROWSER_CHANNEL ? {channel: process.env.ANNA_BROWSER_CHANNEL} : process.platform === 'win32' ? {channel: 'msedge'} : {});
   t.after(() => browser.close());
   const page = await browser.newPage({viewport});
