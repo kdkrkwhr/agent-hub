@@ -2,6 +2,8 @@
 
 Claude Code·Codex·Cursor Agent를 연결하는 **Windows·macOS 로컬 설치판 미리보기**입니다. Python 실행 환경과 UI가 함께 들어 있습니다. Anna 계정이나 Anna SDK를 사용하지 않습니다.
 
+설치 파일은 [검증된 빌드의 artifacts](https://github.com/kdkrkwhr/agent-hub/actions/runs/39888156662)에서 CPU에 맞는 패키지를 받으세요. 개발 PC에는 세 파일이 `dist/installers/`에 함께 있습니다. [검증 기록](HANDOFF.md)에 테스트 결과와 남은 제품화 작업을 정리했습니다.
+
 ## 설치와 첫 작업
 
 1. Windows는 `AgentHub-0.4.0a1-windows-x64-setup.exe`를 실행합니다. 현재 사용자에게 설치하며 관리자 권한을 요구하지 않습니다. **WebView2 Runtime**이 필요합니다. 없다면 [Microsoft 공식 설치 페이지](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)에서 설치하세요.
@@ -28,7 +30,7 @@ Claude Code·Codex·Cursor Agent를 연결하는 **Windows·macOS 로컬 설치�
 - 새 데스크톱 화면은 영어입니다. 요청·답변은 기존 엔진의 요청 언어 지침을 사용합니다. Anna판의 네 언어 UI와는 별개입니다.
 - Coral 없이 사용할 수 있습니다. 기존 웹판의 사무실·독립 투표·Coral 자동 작업 설정을 이 화면에 옮기지는 않았습니다. 설치판을 열 때 기존 Coral 자동 작업을 시작하지 않습니다.
 - 앱에 Python은 포함하지만 사용자의 개발 프로젝트가 필요로 하는 Git·Node·Python 및 각 AI CLI는 별도입니다. 프로젝트 가상환경을 앱의 내장 Python으로 대체하지 않습니다.
-- Windows·Mac 패키지는 **정식 서명 전 미리보기**입니다. Mac은 로컬 ad-hoc 서명이며 Developer ID 서명·Apple notarization을 완료한 배포가 아닙니다. Gatekeeper를 끄는 방법은 안내하지 않습니다. 공개 배포용 서명과 실제 사용자 Mac 검증은 후속 단계입니다.
+- Windows·Mac 패키지는 **정식 서명 전 미리보기**입니다. Mac은 로컬 ad-hoc 서명이며 Developer ID 서명·Apple notarization은 아직 완료하지 않았습니다. OS에서 보안 경고나 실행 차단이 발생할 수 있습니다. 공개 배포용 서명과 실제 사용자 Mac 검증은 후속 단계입니다.
 - 자동 업데이트는 아직 없습니다. 후속 설치 파일로 갱신하며 데이터는 유지합니다.
 
 ## 개발·빌드
@@ -51,4 +53,4 @@ Windows 설치 프로그램 생성에는 Inno Setup 6이 필요합니다. `pytho
 
 기존 셸의 PATH가 없는 Finder 실행을 위해 사용자 `.local/bin`, `.npm-global/bin`, Homebrew의 표준 경로를 추가 탐색합니다. 사용자 셸 초기화 스크립트를 실행하지는 않습니다. 별도 버전 관리 도구에만 설치한 CLI는 표준 PATH에 연결하거나 기존 설정의 실행 파일 경로를 지정해야 할 수 있습니다.
 
-기술: [pywebview의 Windows·Mac 렌더러](https://pywebview.flowrl.com/guide/web_engine.html), [PyInstaller](https://pyinstaller.org/en/stable/), [Inno Setup](https://jrsoftware.org/isinfo.php). 각 라이브러리의 라이선스는 설치 폴더의 `licenses`에 함께 포함합니다.
+기술: [pywebview의 Windows·Mac 렌더러](https://pywebview.flowrl.com/guide/web_engine.html), [PyInstaller](https://pyinstaller.org/en/stable/), [Inno Setup](https://jrsoftware.org/isinfo.php). 각 라이브러리의 라이선스는 패키지 안의 `licenses` 디렉터리에 함께 포함합니다. Windows에서는 설치 폴더의 `_internal/licenses`를 확인하세요.
