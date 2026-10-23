@@ -1,0 +1,6 @@
+{
+  "name": "agent-hub-desktop-checks",
+  "private": true,
+  "scripts": {"test": "node --test browser.test.mjs"},
+  "devDependencies": {"playwright-core": "1.64.0"}
+}

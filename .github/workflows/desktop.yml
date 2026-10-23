@@ -1,0 +1,57 @@
+name: Desktop packages
+on:
+  workflow_dispatch:
+  push:
+    branches: [release-desktop]
+    paths: ['src/**', 'desktop/**', 'tests/**', 'pyproject.toml', '.github/workflows/desktop.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            architecture: x64
+          - os: macos-15
+            target: macos-arm64
+            architecture: arm64
+          - os: macos-15-intel
+            target: macos-x64
+            architecture: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.architecture }}
+      - run: python -m pip install -r desktop/requirements-build.txt -e .
+      - run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        if: runner.os == 'Windows'
+        with:
+          node-version: '22'
+      - if: runner.os == 'Windows'
+        run: npm ci --prefix desktop
+      - if: runner.os == 'Windows'
+        run: npx --prefix desktop playwright-core install chromium
+      - if: runner.os == 'Windows'
+        run: npm test --prefix desktop
+      - name: Build app and installer
+        run: python desktop/build.py
+      - name: Native launch, UI and shutdown smoke test
+        run: python desktop/smoke.py --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-hub-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.target }}/*.exe
+            dist/${{ matrix.target }}/*.dmg
+            dist/${{ matrix.target }}/SHA256SUMS.txt
+            runtime/desktop-smoke/*.json
+          if-no-files-found: error

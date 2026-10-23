@@ -51,7 +51,8 @@ def make_server(hub,port):
 
             if path=='/api/bootstrap':
                 from .adapters import inventory
-                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':'0.3.0','manual_sessions':True,'manual_discussions':True,'manual_folders':True,'data_directory':str(hub.root.resolve())})
+                from . import __version__
+                return self.reply(200,{'csrf':token,'providers':inventory(),'config':hub.config.public(),'version':__version__,'manual_sessions':True,'manual_discussions':True,'manual_folders':True,'data_directory':str(hub.root.resolve())})
             if path=='/api/pipeline/artifact':
                 try:
                     query=parse_qs(urlsplit(self.path).query)
@@ -62,7 +63,7 @@ def make_server(hub,port):
                 try:return self.reply(200,hub.result(parse_qs(urlsplit(self.path).query).get('id',[''])[0]))
                 except ValueError as e:return self.reply(404,{'error':str(e)})
             name='index.html' if path=='/' else path.lstrip('/')
-            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js','office.js','voting.js','pipeline.js'}
+            allowed={'index.html','app.js','style.css','icon.png','icon.ico','markdown-it.min.js','office.js','voting.js','pipeline.js','desktop.html','desktop.js','desktop.css'}
             if name not in allowed:return self.reply(404,{'error':'Not found.'})
             self.reply(200,(STATIC/name).read_bytes(),mimetypes.guess_type(name)[0] or 'application/octet-stream')
         def do_POST(self):

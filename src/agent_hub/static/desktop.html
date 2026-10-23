@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent Hub Radio · Desktop</title><link rel="icon" href="icon.png"><link rel="stylesheet" href="desktop.css"><script src="desktop.js" defer></script></head>
+<body>
+<aside>
+  <div class="brand"><img src="icon.png" alt=""><div>AGENT HUB <b>RADIO</b><small>YOUR LOCAL AGENT WORKSPACE</small></div></div>
+  <button id="new-session" class="primary">+ New workspace</button>
+  <h2>Workspaces</h2><nav id="sessions" aria-label="Saved workspaces"></nav>
+  <footer><span id="version">Desktop preview</span><p>Your CLI accounts. Your local files.</p><details><summary>Data location</summary><p id="data-path"></p></details></footer>
+</aside>
+<main>
+  <header><div><span class="eyebrow">LOCAL DEVELOPMENT</span><h1 id="workspace-title">Bring your agents together.</h1><p id="workspace-path">Choose a project. Work in a separate copy. Keep the conversation.</p></div><button id="refresh">Refresh</button></header>
+  <section id="providers" aria-label="CLI availability"></section>
+  <p class="hint">Install and sign in to the CLIs you want to use. Detection confirms installation; login and usage limits are checked when you send a request.</p>
+  <p id="notice" role="status"></p>
+  <section id="welcome"><span class="eyebrow">ONE PROJECT, SEVERAL PERSPECTIVES</span><h2>A place for your next idea.</h2><p>Ask one agent to investigate, or invite several to compare their approaches. Continue with the same workspace and conversation.</p><div class="example">@claude @codex Compare two approaches to this feature.<br>@cursor Implement the approach we chose.</div><p class="hint">One agent: one request. Two or three agents: two discussion rounds, four or six requests. Requests use each CLI's account.</p><button id="welcome-new" class="primary">Choose a project</button></section>
+  <section id="workspace" hidden>
+    <div id="session-tools"><span id="status" class="badge"></span><button id="sync">Review &amp; resume</button><button id="export">Export changes</button><button id="close-session">Archive workspace</button></div>
+    <p id="copy-path" class="hint"></p>
+    <div id="history" aria-label="Conversation"></div>
+    <div id="progress" aria-live="polite"></div>
+    <form id="composer"><label for="request">Message your agents</label><textarea id="request" rows="3" maxlength="12000" placeholder="@codex Explain this project, or @claude @codex compare approaches…"></textarea><div><span id="default-agent"></span><button type="button" id="stop">Stop</button><button type="submit" id="send" class="primary">Send</button></div><small>Ctrl+Enter / ⌘+Enter to send. Changes stay in the workspace copy; inspect the export before applying them to your project.</small></form>
+  </section>
+</main>
+<dialog id="create-dialog"><form id="create-form"><span class="eyebrow">NEW WORKSPACE</span><h2>Choose a project folder</h2><label for="source">Project folder</label><div class="path-input"><input id="source" required placeholder="Full path to your project"><button type="button" id="browse">Browse…</button></div><label for="agent">First agent</label><select id="agent"><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="cursor">Cursor Agent</option></select><label class="check"><input type="checkbox" id="writable"> Allow this session to edit its workspace copy</label><p class="hint">Your current files are copied, including uncommitted changes. Dependencies, caches and common secret folders are excluded. Add project-specific exclusions in .agent-hub-ignore. No AI call happens when creating a workspace.</p><p id="create-error" role="alert"></p><div class="dialog-actions"><button type="button" id="create-cancel">Cancel</button><button id="create-submit" class="primary">Create workspace</button></div></form></dialog>
+</body></html>

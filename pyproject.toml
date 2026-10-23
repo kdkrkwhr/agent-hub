@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-hub-radio"
-version = "0.3.0"
+version = "0.4.0a1"
 description = "A local-first Coral collaboration hub for coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,8 +13,12 @@ authors = [{name = "AGENT HUB contributors"}]
 dependencies = []
 classifiers = ["Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Environment :: Web Environment"]
 
+[project.optional-dependencies]
+desktop = ["pywebview==6.1"]
+
 [project.scripts]
 agent-hub = "agent_hub.__main__:main"
+agent-hub-desktop = "agent_hub.desktop_app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

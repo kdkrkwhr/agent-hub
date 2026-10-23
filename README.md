@@ -6,9 +6,9 @@
 
 에이전트에게 토론·투표·역할 분담 작업을 맡기고, 대화와 작업 과정을 한 화면에서 확인합니다.
 
-> **0.3.0 Alpha** · Windows 중심으로 검증했습니다. 캡처는 예시 데이터로 구성한 화면입니다.
+> **0.4.0a1 Desktop preview** · Windows·macOS 설치판 제작 중입니다. 아래 기존 웹 화면 캡처는 예시 데이터입니다.
 
-설치형은 **Windows와 macOS를 함께 지원하는 방향으로 준비 중**입니다. 목표 배포 형식은 Windows 설치 프로그램(`.exe`), Apple Silicon·Intel Mac용 앱(`.app`)과 설치 이미지(`.dmg`)입니다. 아직 이 설치 파일을 제공하는 단계는 아닙니다. 현재 `--desktop`은 Windows의 Edge 앱 창을 사용하고, macOS에서는 일반 브라우저로 열립니다.
+설치판은 **Windows `.exe`, Apple Silicon·Intel Mac `.dmg`**로 빌드합니다. 새 전용 창에서 프로젝트를 골라 CLI 에이전트와 작업하며 Python 실행 환경이 포함됩니다. [설치·사용·빌드 안내](desktop/README.md). 기존 `agent-hub --desktop`의 Edge 앱 창과 별도로, 소스 실행은 `agent-hub-desktop` 또는 `python -m agent_hub.desktop_app`을 사용합니다.
 
 ## 주요 기능
 

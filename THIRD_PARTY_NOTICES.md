@@ -2,6 +2,8 @@
 
 AGENT HUB implements its own local UI, queue and HTTP MCP client. No Coral server JAR, JDK, commercial agent binary, authentication file or private operational configuration is distributed here.
 
+The optional desktop distribution bundles Python, pywebview and its platform dependencies through PyInstaller. It retains collected dependency license/notice files and a dependency version inventory under `licenses/dependencies`. pywebview is BSD-3-Clause; PyInstaller is GPL with its bootloader distribution exception. These licenses do not replace this repository's MIT license. The Windows installer is built with Inno Setup; the compiler is not shipped as part of the app.
+
 - Coral server: https://github.com/Coral-Protocol/coral-server
 - AgentRadio reference project: https://github.com/Coral-Protocol/AgentRadio (Apache-2.0; not bundled)
 - Claude Code: https://code.claude.com/docs/en/legal-and-compliance
