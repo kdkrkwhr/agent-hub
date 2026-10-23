@@ -8,11 +8,18 @@ import unittest
 from unittest.mock import Mock, patch
 import urllib.request
 
-from agent_hub.desktop_app import DesktopDialogs, prepare_environment, running_hub
+from agent_hub.desktop_app import DesktopDialogs, prepare_environment, running_hub, main
 from agent_hub.__main__ import InstanceLock
 
 
 class DesktopTests(unittest.TestCase):
+    def test_missing_remembered_folder_shows_error_instead_of_silent_exit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch('agent_hub.desktop_app.default_data_directory',return_value=Path(folder)), patch('agent_hub.desktop_app.data_directory',side_effect=RuntimeError('Missing stored folder')), patch('agent_hub.desktop_app.show_error') as alert:
+                self.assertEqual(main([]),1)
+                self.assertIn('Missing stored folder',alert.call_args.args[0])
+                self.assertTrue((Path(folder)/'logs/desktop-error.log').is_file())
+
     def test_finder_path_keeps_user_paths_and_adds_cli_locations_without_shell(self):
         with patch('sys.platform', 'darwin'), patch.dict(os.environ, {'PATH':'/custom/bin'}):
             with patch('subprocess.run') as execute:
@@ -47,6 +54,10 @@ class DesktopTests(unittest.TestCase):
                 self.assertFalse(hub.thread.is_alive(), 'Legacy automatic work must not start')
                 with urllib.request.urlopen(origin+'/desktop.html') as response:
                     self.assertIn(b'Choose a project folder',response.read())
+                    self.assertIn("'unsafe-eval'",response.headers['Content-Security-Policy'])
+                    self.assertNotIn("'unsafe-inline'",response.headers['Content-Security-Policy'])
+                with urllib.request.urlopen(origin+'/') as response:
+                    self.assertNotIn("'unsafe-eval'",response.headers['Content-Security-Policy'])
                 with urllib.request.urlopen(origin+'/api/bootstrap') as response:
                     data=json.load(response)
                 body=json.dumps({'source':str(source),'workspaceMode':'folder'}).encode()

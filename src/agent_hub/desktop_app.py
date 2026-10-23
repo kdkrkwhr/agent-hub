@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from . import __version__
 from .__main__ import InstanceLock
-from .config import atomic_json, data_directory
+from .config import atomic_json, data_directory, default_data_directory
 from .engine import Hub
 from .server import make_server
 from .storage import initialize, path as storage_path
@@ -49,7 +49,7 @@ def running_hub(root):
         server = None
         serving = None
         try:
-            server = make_server(hub, 0)
+            server = make_server(hub, 0, native_bridge=True)
             serving = threading.Thread(target=server.serve_forever, daemon=True, name='desktop-http')
             # Opening a window never starts Coral or queued automatic work.
             hub.start(manual_only=True)
@@ -101,9 +101,10 @@ def main(argv=None):
     if args.smoke_report and not args.data_dir:
         parser.error('--smoke-report requires an isolated --data-dir')
     prepare_environment()
-    root = (args.data_dir or data_directory()).expanduser().resolve()
+    root = (args.data_dir or default_data_directory()).expanduser().resolve()
     result = {'version': __version__, 'ok': False, 'platform': sys.platform}
     try:
+        root = (args.data_dir or data_directory()).expanduser().resolve()
         import webview
         with running_hub(root) as (hub, origin):
             dialogs = DesktopDialogs(origin)
@@ -111,6 +112,10 @@ def main(argv=None):
                                            width=1320, height=900, min_size=(860, 600),
                                            text_select=True, background_color='#101722')
             dialogs._window = window
+            if args.smoke_report:
+                def smoke_echo(value):
+                    return value
+                window.expose(smoke_echo)
             webview.settings['ALLOW_FILE_URLS'] = False
             webview.settings['OPEN_EXTERNAL_LINKS_IN_BROWSER'] = True
 
@@ -126,11 +131,16 @@ def main(argv=None):
             def smoke():
                 try:
                     end = time.monotonic() + 30
+                    bridge_started = False
                     while time.monotonic() < end:
-                        state = window.evaluate_js("({ready:document.body.dataset.ready,title:document.title,version:document.getElementById('version')?.textContent,error:document.getElementById('notice')?.textContent})")
+                        state = window.evaluate_js("({ready:document.body.dataset.ready,bridge:document.body.dataset.smokeBridge,title:document.title,version:document.getElementById('version')?.textContent,error:document.getElementById('notice')?.textContent})")
                         if state and state.get('ready') == 'true':
-                            result.update(ok=not state.get('error'), ui=state)
-                            break
+                            if not bridge_started:
+                                window.run_js("window.pywebview.api.smoke_echo('bridge-ok').then(value => {document.body.dataset.smokeBridge=value;})")
+                                bridge_started = True
+                            if state.get('bridge') == 'bridge-ok':
+                                result.update(ok=not state.get('error'), ui=state)
+                                break
                         time.sleep(.2)
                     else:
                         result['error'] = 'Native UI did not become ready.'

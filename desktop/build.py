@@ -5,6 +5,7 @@ from importlib.metadata import distributions
 import json
 from pathlib import Path
 import platform
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -53,10 +54,26 @@ def main():
                     dest.parent.mkdir(parents=True,exist_ok=True)
                     shutil.copyfile(source,dest)
     (notices/'DEPENDENCIES.json').write_text(json.dumps(versions,indent=2),encoding='utf-8')
+    shutil.copyfile(ROOT/'desktop/licenses/PYTHON.txt',notices/'PYTHON.txt')
     args_build+=['--add-data',str(notices)+':licenses/dependencies']
     if sys.platform=='win32':args_build+=['--icon',str(ROOT/'src/agent_hub/static/icon.ico')]
-    else:args_build+=['--osx-bundle-identifier','io.github.kdkrkwhr.agenthub','--target-architecture',platform.machine()]
+    else:
+        iconset=ROOT/'build/AgentHub.iconset'
+        iconset.mkdir(parents=True,exist_ok=True)
+        for size in (16,32,128,256,512):
+            for scale in (1,2):
+                name=f'icon_{size}x{size}'+('@2x' if scale==2 else '')+'.png'
+                run('sips','-z',size*scale,size*scale,ROOT/'src/agent_hub/static/icon.png','--out',iconset/name)
+        run('iconutil','-c','icns',iconset,'-o',ROOT/'build/AgentHub.icns')
+        args_build+=['--osx-bundle-identifier','io.github.kdkrkwhr.agenthub','--target-architecture',platform.machine(),'--icon',str(ROOT/'build/AgentHub.icns')]
     run(*args_build,ROOT/'desktop/entry.py')
+    if sys.platform=='darwin':
+        info=out/'AgentHub.app/Contents/Info.plist'
+        data=plistlib.loads(info.read_bytes())
+        data.update(CFBundleDisplayName='Agent Hub Radio',CFBundleShortVersionString='0.4.0',CFBundleVersion='4001',LSMinimumSystemVersion='15.0')
+        info.write_bytes(plistlib.dumps(data))
+        run('codesign','--force','--deep','--sign','-',out/'AgentHub.app')
+        run('codesign','--verify','--deep','--strict',out/'AgentHub.app')
     if args.app_only:return
     if sys.platform=='win32':
         compiler=shutil.which('ISCC') or next((str(p) for p in [Path('C:/Program Files (x86)/Inno Setup 6/ISCC.exe'),Path('C:/Program Files/Inno Setup 6/ISCC.exe')] if p.is_file()),None)

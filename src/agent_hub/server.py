@@ -8,7 +8,7 @@ from urllib.parse import urlsplit,parse_qs
 
 STATIC=Path(__file__).parent/'static'
 
-def make_server(hub,port):
+def make_server(hub,port,*,native_bridge=False):
     token=secrets.token_urlsafe(32)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
@@ -23,7 +23,11 @@ def make_server(hub,port):
             body=data if isinstance(data,bytes) else json.dumps(data,ensure_ascii=False).encode('utf-8')
             self.send_response(status);self.send_header('Content-Type',content);self.send_header('Content-Length',str(len(body)))
             self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
-            self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
+            # pywebview 6 returns native-dialog results through evaluate_js (eval).
+            # Permit it only for the native desktop document; inline scripts and
+            # external scripts remain blocked. Ordinary web mode stays stricter.
+            script_policy="'self' 'unsafe-eval'" if native_bridge and urlsplit(self.path).path=='/desktop.html' else "'self'"
+            self.send_header('Content-Security-Policy',f"default-src 'self'; script-src {script_policy}; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
             self.end_headers()
             try:self.wfile.write(body)
             except (BrokenPipeError,ConnectionResetError):pass
