@@ -80,7 +80,9 @@ Orca에서는 `orca tab switch --page <id> --focus`로 실제 탭을 보이게 �
 
 ## 남은 일
 
-- 설치형 방향: 사용자가 Windows 로컬 에이전트 허브(Claude Code·Codex·Cursor 연결)를 선택했다. 기존 Python·SQLite·CLI 연결을 재사용하며 전용 창, 실행 환경 패키징, 설치·제거, 창 종료 시 소유 프로세스 정리부터 설계한다. 현재 `--desktop`은 Edge 앱 창이며 설치 파일은 아직 만들지 않았다. Anna판과 로컬판의 버전·저장·AI 연결을 구분한다.
+- 설치형 방향 (2026-10-23 추가 요청): 사용자가 **Windows와 macOS 모두**에서 Claude Code·Codex·Cursor를 연결하는 로컬 에이전트 허브를 원한다. 기존 Python·SQLite·CLI 연결을 재사용하고 공통 전용 창, 실행 환경 패키징, 설치·제거, 창 종료 시 소유 프로세스 정리를 구현한다. 목표는 Windows `.exe` 설치 프로그램과 **Apple Silicon(arm64)·Intel(x86_64) Mac 각각의 `.app`/`.dmg`**다. 현재 `--desktop`은 Windows에서 Edge 앱 창, Mac에서 일반 브라우저를 여는 수준이며 설치 파일은 아직 없다. Anna판과 로컬판의 버전·저장·AI 연결을 구분한다.
+- Mac 추가 검증 범위: Finder에서 실행해도 CLI를 찾을 수 있도록 PATH와 실행 파일 직접 지정 지원을 점검한다. GUI 앱은 셸의 PATH를 그대로 상속하지 않을 수 있다. 한글·공백 경로, `~/Library/Application Support/AgentHub` 데이터 보존, Cmd 단축키, 창 닫기·앱 종료·재실행, 작업 프로세스 종료, 각 CPU용 Python 및 필요한 Java/Coral 실행 환경을 확인한다. 기존 macOS Python CI 성공은 설치 앱이나 실제 CLI 인증 검증을 대신하지 않는다.
+- 설치 빌드는 Windows와 macOS CI에서 각각 수행하고, 두 Mac CPU에 맞는 의존성을 포함한다. 공개 Mac 배포 전 Developer ID 서명·notarization을 준비한다. 인증서·개발자 계정 설정과 실제 Mac 설치·실행 검증은 아직 수행하지 않았다. [macOS 앱 및 GUI PATH](https://v2.tauri.app/distribute/macos-application-bundle/), [DMG 배포](https://v2.tauri.app/distribute/dmg/), [서명·notarization](https://v2.tauri.app/distribute/sign/macos/)은 패키징 후보 기술의 공식 참고 자료이며, Tauri 채택이나 구현 완료를 뜻하지 않는다.
 - 외부 사용자 3~5명의 가치·재사용 의향 검증은 사용자의 요청으로 보류한다. 단일 AI보다 낫다고 아직 주장하지 않는다.
 - 별도 로그인 계정으로 첫 사용과 실제 계정 간 데이터 격리를 확인한다. 이번에는 두 번째 계정이 없어 권한(app/self) 검토와 모의 첫 사용, 같은 계정 두 탭 검증까지 수행했다.
 - 소개·안내·심사 재현 메모는 0.8.0 다국어 지원을 반영했다. 실제 소개 캡처는 촬영 버전이 명시된 0.7.1 자료를 유지한다. 최종 1.0 후보와 자료를 대조하고, 새 지시로 **1.0.0** 후보 생성·제출을 진행한다. 0.x에서 제출하지 않는다.
