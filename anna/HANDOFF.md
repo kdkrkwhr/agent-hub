@@ -1,6 +1,28 @@
 # Agent Hub Radio 인수인계
 
-## 현재 상태 — 0.7.1 (2026-10-22)
+## 현재 상태 — 0.8.0 (2026-10-23)
+
+- 앱 `agent-hub-radio` / app ID **561**, 브랜치 `release-anna`, 배포 코드 **`145cd06`**.
+- **UI 0.8.0**, working revision **8**, bundle **ready**, **27파일 / 169,860 bytes**.
+- Content hash: `c872e5da617798a601bf2bb2de8f49f43aaa5da01f9ec42818d6815ea9657ba9`.
+- 소유자 Install draft를 완료하고 실제 설치 경로 `/anna-apps/kdkrkwhr/agent-hub-radio/0.0.0-draft/index.html`에서 버전·언어 전환·재접속을 확인했다. Executa 패키지는 없다.
+- immutable 최신 cut **0.6.0 / ID 1391**, `status=draft`, `review_candidate_version=null`, 공개 버전 없음. **0.8.0 cut·심사·공개 출시는 하지 않았다. 첫 심사는 1.0.0이다.**
+
+### 변경 및 검증
+
+- 새 사용자·잘못된 언어 값은 **영어 기본값**이다. 저장된 한국어 등 유효한 선택은 유지한다. 모델 설정에서 **English / 한국어 / 简体中文 / 日本語**를 고른다.
+- UI·역할·도움말·오류·사무실·예시·날짜·Markdown 내보내기와 새 요청 프롬프트를 네 언어로 지원한다. 기존 응답은 번역하거나 덮어쓰지 않으며 중단 기록은 시작할 때의 언어로 재개한다. 언어만 바꾸면 AI를 호출하지 않는다.
+- **단위 101개 / 브라우저 58개 / strict validation 통과**. [Anna Windows·Ubuntu CI](https://github.com/kdkrkwhr/agent-hub/actions/runs/39883564320)와 [로컬 제품 6개 환경 CI](https://github.com/kdkrkwhr/agent-hub/actions/runs/39883564244)도 모두 성공했다.
+- 실제 설치본에서 네 언어의 역할명·동작·사무실 표기, 입력 초안과 완료 응답 보존, 새로고침 후 원래 한국어 복원을 확인했다. 실제 내부 폭 1178px에서 가로 넘침이 없었다. 26개 정적 파일의 SHA-256이 로컬과 일치한다. HTML은 별도 fetch 403 때문에 정상 탐색으로 로드한 DOM·실제 화면으로 확인했다.
+- 배포 전 **12개 APS 행의 값·ETag 보존**, **6개 채널 / 5개 기록** 유지. 실제 언어 전환과 복원으로 언어 변경 행 6개만 추가됐다. 유효 모델 설정과 원래 한국어 선택은 배포 전과 같다. 이번 검증에서 **새 AI 요청은 없었다**.
+- 등록정보 7개 필드가 로컬과 일치하고 공개 안내·문의·데이터 처리 링크와 기존 스크린샷 4장 URL의 HTTP 200을 확인했다. 기존 0.7.1 캡처는 촬영 버전을 명시한 상태로 유지한다.
+
+근거·제한은 [VALIDATION_080.md](VALIDATION_080.md), 변경 사항은 [RELEASE_080.md](RELEASE_080.md). 중국어·일본어 실제 모델 응답 품질 및 원어민 감수, 별도 계정 격리, 실제 모바일 호스트 검증은 수행하지 않았다.
+
+Git 제외 증거는 `runtime/review-plan/`의 `snapshot-080-*.json`, `push-080-result.json`, `install-080-result.json`, `ui-080-result.json`, `reopened-080.json`, `installed-hashes-080.json`, `installed-080-visible.png`, 테스트 로그다. 검증용 Orca 페이지는 `67306e7b-3dbe-4cf0-88cc-58a5925c9f64`이다. 기존 0.7.1 탭의 미전송 입력과 NoteBuddy 데이터·배포는 건드리지 않았다.
+
+
+## 이전 배포 — 0.7.1 (2026-10-22)
 
 - 앱 `agent-hub-radio` / app ID **561**, 브랜치 `release-anna`, 배포 코드 **`c41bd7a`** (주요 구현 `8396323`).
 - **UI 0.7.1**, working revision **7**, bundle **ready**, 24파일 / **141,051 bytes**.
@@ -34,29 +56,6 @@ Git 제외 증거는 `runtime/review-plan/`에 있다: `live-storage-071.json`, 
 - 번들·manifest는 변경하지 않았다. 실제 서버의 **revision 7 / ready / 기존 hash** 유지, 최신 cut **0.6.0 / 1391**, `draft`, `is_published=false`, `review_candidate_version=null`을 재확인했다. **1.0 후보 생성·심사 제출·공개 출시는 하지 않았다.**
 - 로컬 확인 결과: `runtime/review-plan/listing-verification.json`, `listing-cdn-*.webp`. 등록정보 확인용 Orca 페이지: `0081a25d-db25-4193-840a-4c1de40945bf`.
 
-## 이전 배포 — 0.7.0 (2026-10-22)
-
-- 앱 `agent-hub-radio` / app ID **561**, 브랜치 `release-anna`, 배포 코드 커밋 **`2b07165`**.
-- **UI 0.7.0**, working revision **5**, bundle **ready**, 24개 파일 / 129,865 bytes.
-- Content hash: `7abcfc9fe18aad77eefc2a2ea18b0ce6beb3863dc097f37b214d99e904d17c3c`.
-- Console의 **Install draft** 실행 후 Orca의 실제 설치 경로 `/anna-apps/kdkrkwhr/agent-hub-radio/0.0.0-draft/index.html`에서 **v0.7.0**과 새 기능을 확인했다.
-- 최신 immutable cut은 **0.6.0 / version ID 1391** 그대로다. 서버 상태 `draft`, `is_published=false`, `review_candidate_version=null`. **0.7.0 cut·심사·공개 출시를 하지 않았다. 첫 심사는 1.0.0으로 진행한다.**
-- 앱 설명·태그라인·Anna 안내 링크도 동기화했다. 공개 GitHub 안내 링크 HTTP 200을 확인했다.
-
-### 실제 설치 검증
-
-- 새 채널 **0.7 출시 검토 테스트**에 빠른 검토 1건과 독립 투표 1건을 UI에서 실행했다. 정상 완료된 응답은 총 7개이며 실제 모델은 `google/gemini-3-flash-preview`였다.
-- 빠른 검토는 의견 3개+최종안 1개, 결과는 5개 항목으로 표시됐다. 투표는 1/3 제출 중 선택이 비공개였고, 완료 후 A 3표 / B 0표 / C 0표 / 기권 0표였다.
-- 요약 복사 성공 및 클립보드의 결과 텍스트를 확인했다. **MD 저장**으로 `agent-hub-channel-mvitcg7u-dgluzg.md`(6,945 bytes)를 Downloads에 내려받아 토론·투표·실제 모델을 확인했다.
-- 앱 창을 닫고 다시 열어 완료 기록 2건, 결정 요약과 기존 채널이 복원되는 것을 확인했다. 자동 재실행은 없었다.
-- 사무실/투표실의 3역할과 결과 표시, 실제 설치 창(내부 폭 1,178px)의 가로 넘침 없음을 확인했다. 360px 검증은 모의 브라우저에서 완료했다. 실제 Anna의 좁은 창 캡처는 호스트가 창 크기를 복원해 최종 증거로 사용하지 않는다.
-- 기존 데이터는 유지했다. 테스트 동안 정리자 계열만 `gpt` → `auto`로 바꾸고 검증 후 **원래 `gpt`로 복구·저장**했다. 기존 실패 기록에는 GPT 요청의 모델 가용성 오류가 있으므로 같은 오류가 나면 자동 또는 사용 가능한 모델을 선택한다. 이번에 GPT 가용성을 새로 검증하지는 않았다.
-- 실제 설치 앱의 저장 장애는 의도적으로 만들지 않았다. 저장만 재시도·빈 응답·중단·회복은 모의 테스트로 검증했다.
-
-자동 검증: **단위 86개 / 브라우저 47개 시나리오 / strict validation 통과**. 기존 영문 문구를 기대하던 브라우저 테스트 한 개를 수정해 재실행했다. 실제 개발 API에서는 별도로 빠른 검토·단일 응답 비교·투표도 실행했다. 근거와 제한은 [VALIDATION_070.md](VALIDATION_070.md), 기능은 [RELEASE_070.md](RELEASE_070.md), 사용자 안내는 [README.md](README.md).
-
-비공개 로컬 산출물은 `runtime/review-plan/`(Git 제외)에 있다. 실제 UI 캡처 `anna-070-brief.png`, `anna-070-visible.png`, `anna-070-office.png`, 다운로드 복사본 `installed-export.md`, 실제 API 결과 `live-validation.json`. 캡처에는 Anna 데스크톱이 함께 보여 스토어 이미지로 등록하지 않았다.
-
 ## 배포 순서
 
 ```powershell
@@ -75,15 +74,16 @@ npm run validate
 
 테스트 배포에서 `apps cut`, `submit-review`, `publish`는 실행하지 않는다. `apps push`만으로 설치 앱이 바뀌었다고 판단하지 않는다.
 
-이 환경(Node 24.14.1 / CLI 0.1.57)에서 `anna-app apps push --dry-run`은 종료 시 libuv assertion으로 실패했다. 패키지 내부의 동일한 `runAppsPush` 함수를 호출하고 `process.exitCode`로 자연 종료시켜 dry-run과 업로드를 완료했다. 0.7.0에는 `ifMatch:4`를 사용했다. 이번 0.7.1 업로드는 `ifMatch:5` → revision 6, 표시 수정 후 `ifMatch:6` → revision 7로 진행했다. 최종 실제 설치본의 새로고침 성공 문구까지 대조했다. 이 우회는 로컬 실행용이며 제품 의존성이나 인증 방식을 변경하지 않았다.
+이 환경(Node 24.14.1 / CLI 0.1.57)에서 `anna-app apps push --dry-run`은 종료 시 libuv assertion으로 실패했다. 패키지 내부의 동일한 `runAppsPush` 함수를 호출하고 `process.exitCode`로 자연 종료시켜 dry-run과 업로드를 완료했다. 0.7.0에는 `ifMatch:4`를 사용했다. 0.7.1 업로드는 `ifMatch:5` → revision 6, 표시 수정 후 `ifMatch:6` → revision 7로 진행했다. 0.8.0에는 `ifMatch:7`로 revision 8을 올렸다. 각 최종 설치본의 실제 화면까지 대조했다. 이 우회는 로컬 실행용이며 제품 의존성이나 인증 방식을 변경하지 않았다.
 
 Orca에서는 `orca tab switch --page <id> --focus`로 실제 탭을 보이게 한 뒤 캡처한다. 배경 탭의 캡처가 전환 애니메이션에 멈춘 사례가 있었다. UI DOM·실제 화면을 모두 확인하고, iframe URL에는 단기 인증값이 있으므로 경로만 기록한다.
 
 ## 남은 일
 
+- 설치형 방향: 사용자가 Windows 로컬 에이전트 허브(Claude Code·Codex·Cursor 연결)를 선택했다. 기존 Python·SQLite·CLI 연결을 재사용하며 전용 창, 실행 환경 패키징, 설치·제거, 창 종료 시 소유 프로세스 정리부터 설계한다. 현재 `--desktop`은 Edge 앱 창이며 설치 파일은 아직 만들지 않았다. Anna판과 로컬판의 버전·저장·AI 연결을 구분한다.
 - 외부 사용자 3~5명의 가치·재사용 의향 검증은 사용자의 요청으로 보류한다. 단일 AI보다 낫다고 아직 주장하지 않는다.
 - 별도 로그인 계정으로 첫 사용과 실제 계정 간 데이터 격리를 확인한다. 이번에는 두 번째 계정이 없어 권한(app/self) 검토와 모의 첫 사용, 같은 계정 두 탭 검증까지 수행했다.
-- 소개 캡처·데이터 처리 안내·심사 재현 메모는 0.7.1 기준으로 준비·등록했다. 최종 1.0 후보와 자료를 대조하고, 새 지시로 **1.0.0** 후보 생성·제출을 진행한다. 0.x에서 제출하지 않는다.
+- 소개·안내·심사 재현 메모는 0.8.0 다국어 지원을 반영했다. 실제 소개 캡처는 촬영 버전이 명시된 0.7.1 자료를 유지한다. 최종 1.0 후보와 자료를 대조하고, 새 지시로 **1.0.0** 후보 생성·제출을 진행한다. 0.x에서 제출하지 않는다.
 - 실제 사용 중 quota 소진은 의도적으로 만들지 않았다. 모의 테스트는 통과했으나 서버 측 취소와 정확히 한 번 과금은 보장하지 않는다. 연결 종료 후 재개 전 미완료 요청 안내를 유지한다.
 - 재설치 후에는 대시보드를 새로 불러와 현재 앱 창을 확인한다. Orca의 닫힘 애니메이션 중 이전 iframe이 DOM에 남을 수 있어 첫 iframe이 현재 런타임이라고 가정하지 않는다. 이번 오래된 종료 창의 timeout은 정상 활성 앱 오류로 집계하지 않았다.
 - 이전부터 있던 사용자 파일 `.claude/`, `skills-lock.json`은 변경·커밋하지 않았다. 오래된 인수인계는 [HANDOFF_HISTORY.md](HANDOFF_HISTORY.md)에 보존한다.

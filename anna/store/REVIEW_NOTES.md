@@ -1,6 +1,6 @@
 # Agent Hub Radio · Reviewer walkthrough
 
-**Updated 2026-10-22 for test draft 0.8.0. Not yet submitted.** See [HANDOFF](../HANDOFF.md) for the verified working revision and bundle. The first intended review candidate is 1.0.0; its version and bundle must be verified before attaching these notes to a submission.
+**Updated 2026-10-23 for test draft 0.8.0. Not yet submitted.** See [HANDOFF](../HANDOFF.md) for the verified working revision and bundle. The first intended review candidate is 1.0.0; its version and bundle must be verified before attaching these notes to a submission.
 
 ## What this app does
 
@@ -60,7 +60,7 @@ C. Ten visual themes
 
 [0.7.0 validation](../VALIDATION_070.md): actual quick review, successful three-role ballot, copy/export and reopen. [0.7.1 validation](../VALIDATION_071.md): nine-response debate, stop/reopen/resume, two actual same-account Anna tabs, model availability error, storage limits and conditional writes. Actual observed model: `google/gemini-3-flash-preview`; this is evidence from that account, not a required or promised model.
 
-The earlier code baseline passed 95 unit and 51 simulated-browser tests plus strict validation; a later warning-display fix received targeted rechecks. Version 0.8.0 adds four-language support and an English default; see [0.8.0 release notes](../RELEASE_080.md) and [HANDOFF](../HANDOFF.md) for its validation. These materials do not substitute for the final 1.0 candidate verification.
+Version 0.8.0 passed **101 unit and 58 simulated-browser tests** plus strict validation, with successful Windows and Linux Anna CI. The installed owner draft was checked for switching all four languages, preserving existing responses and unsent input, and restoring settings after reopening. No new AI request was made in this validation; actual Chinese/Japanese output quality and native-speaker review remain unverified. See [0.8.0 validation](../VALIDATION_080.md), [release notes](../RELEASE_080.md) and [HANDOFF](../HANDOFF.md). These materials do not substitute for the final 1.0 candidate verification.
 
 ## 제출 전 내부 확인
 
